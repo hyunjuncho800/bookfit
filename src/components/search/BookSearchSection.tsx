@@ -56,17 +56,24 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Filter books by Tag & Lexile level
+  // Filter books by Tag & Lexile level (with Filter Bypass for '전체' / 'all')
   const filteredBooks = books.filter((book) => {
     const matchTag =
+      !selectedTag ||
       selectedTag === '전체' ||
+      selectedTag === '#전체' ||
+      selectedTag === 'all' ||
       book.gradeTag.includes(selectedTag) ||
       book.recommendReason.includes(selectedTag) ||
       book.lexileLevel.includes(selectedTag) ||
       book.summary.includes(selectedTag);
 
     const matchLexile =
-      selectedLexileLevel === 'all' || book.lexileLevel.includes(selectedLexileLevel);
+      !selectedLexileLevel ||
+      selectedLexileLevel === 'all' ||
+      selectedLexileLevel === '전체 레벨' ||
+      selectedLexileLevel === '전체' ||
+      book.lexileLevel.includes(selectedLexileLevel);
 
     return matchTag && matchLexile;
   });
