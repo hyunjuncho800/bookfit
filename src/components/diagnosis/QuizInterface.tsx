@@ -13,7 +13,13 @@ export const QuizInterface: React.FC<QuizInterfaceProps> = ({ questions, onCompl
   const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
-  const currentQ = questions[currentIndex];
+  // Reset quiz state when component mounts or questions prop updates
+  useEffect(() => {
+    setCurrentIndex(0);
+    setUserAnswers({});
+  }, [questions]);
+
+  const currentQ = questions[currentIndex] || questions[0];
   const progressPercent = Math.round(((currentIndex + 1) / questions.length) * 100);
 
   // Time Attack Timer Effect
