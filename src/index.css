@@ -1,0 +1,72 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Pretendard:wght@300;400;500;600;700&display=swap');
+
+@theme {
+  --color-cream: #FBF9F5;
+  --color-cream-light: #FFFDF9;
+  --color-cream-card: #F4EFE6;
+  --color-cream-dark: #EFE7DA;
+
+  --color-charcoal: #2D3748;
+  --color-charcoal-light: #4A5568;
+  --color-charcoal-muted: #718096;
+  --color-charcoal-dark: #1A202C;
+
+  --color-forest: #2C4A3E;
+  --color-forest-light: #3A5F50;
+  --color-forest-dark: #1E352C;
+  --color-forest-muted: #E8EFEA;
+
+  --color-oak: #D4A373;
+  --color-oak-light: #E6BD94;
+  --color-oak-dark: #B88654;
+  --color-oak-subtle: #FAF3EB;
+
+  --font-serif: 'Noto Serif KR', Georgia, serif;
+  --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+
+  --shadow-book: 0 10px 25px -5px rgba(44, 74, 62, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  --shadow-shelf: 0 4px 20px -2px rgba(212, 163, 115, 0.2);
+  --shadow-elevated: 0 20px 30px -10px rgba(45, 55, 72, 0.12);
+}
+
+body {
+  background-color: #FBF9F5;
+  color: #2D3748;
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, .font-serif {
+  font-family: 'Noto Serif KR', Georgia, serif;
+}
+
+/* Custom scrollbar for library shelf effect */
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F4EFE6;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4A373;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B88654;
+}
+
+/* Custom Wood Shelf Effect */
+.wood-shelf {
+  background: linear-gradient(180deg, #E6D2BA 0%, #D4A373 30%, #C08C5C 100%);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.book-shadow {
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.08), 8px 12px 20px rgba(0, 0, 0, 0.15);
+}

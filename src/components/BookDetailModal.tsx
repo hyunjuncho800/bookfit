@@ -1,0 +1,452 @@
+import React, { useEffect, useState } from 'react';
+import type { Book, AIGeneratedGuide } from '../types';
+import { generateBookGuideAI } from '../services/aiGuideGenerator';
+import { saveOrUpdateLibraryBook } from '../services/supabaseService';
+import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, BookmarkCheck, ArrowRight, ShoppingBag, Brain, Loader2 } from 'lucide-react';
+import { BookCoverImage } from './common/BookCoverImage';
+
+interface BookDetailModalProps {
+  book: Book & { partnerUrl?: string } | null;
+  onClose: () => void;
+  onOpenDiagnosis: () => void;
+}
+
+// Coupang Partners Base URL
+export const BASE_PARTNER_URL = "https://link.coupang.com/a/fFatn3zjDo";
+
+export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose, onOpenDiagnosis }) => {
+  const [isSaved, setIsSaved] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'questions' | 'quiz' | 'vocab'>('questions');
+  const [aiGuide, setAiGuide] = useState<AIGeneratedGuide | null>(null);
+  const [isLoadingAI, setIsLoadingAI] = useState<boolean>(false);
+  const [selectedQuizAnswers, setSelectedQuizAnswers] = useState<Record<number, number>>({});
+
+  // Fetch AI Generated Guide on Book Select
+  useEffect(() => {
+    if (!book) return;
+
+    let isMounted = true;
+    setIsLoadingAI(true);
+
+    generateBookGuideAI({
+      title: book.title,
+      description: book.summary,
+      targetAge: book.gradeTag,
+    }).then((guide) => {
+      if (isMounted) {
+        setAiGuide(guide);
+        setIsLoadingAI(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [book]);
+
+  // ESC Key & Body Scroll Lock Effect
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (book) {
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [book, onClose]);
+
+  if (!book) return null;
+
+  const trackBadgeColors = {
+    comfort: 'bg-forest/15 text-forest border-forest/30',
+    challenge: 'bg-oak/20 text-oak-dark border-oak/40',
+    supplement: 'bg-charcoal/10 text-charcoal border-charcoal/30',
+  };
+
+  const trackNames = {
+    comfort: 'Step 1. 적정 도서 (70%)',
+    challenge: 'Step 2. 도전 도서 (10%)',
+    supplement: 'Step 3. 약점 보완 (20%)',
+  };
+
+  const targetCoupangUrl =
+    book.partnerUrl ||
+    `${BASE_PARTNER_URL}?q=${encodeURIComponent(book.title)}`;
+
+  const handleCoupangBuy = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.open(targetCoupangUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleQuizSelect = (qIdx: number, optIdx: number) => {
+    setSelectedQuizAnswers((prev) => ({ ...prev, [qIdx]: optIdx }));
+  };
+
+  const handleToggleSaveBook = async () => {
+    const nextSaved = !isSaved;
+    setIsSaved(nextSaved);
+    if (nextSaved && book) {
+      await saveOrUpdateLibraryBook(book, 'wantToRead');
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/70 backdrop-blur-md animate-fadeIn"
+      onClick={onClose}
+    >
+      {/* Modal Container */}
+      <div
+        className="relative w-full max-w-3xl bg-cream-light border-2 border-oak/40 rounded-3xl shadow-elevated overflow-hidden max-h-[92vh] flex flex-col my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        
+        {/* Modal Header Bar */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-cream-dark bg-forest text-white">
+          <div className="flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-xl bg-oak text-forest flex items-center justify-center font-bold">
+              <BookOpen className="w-4 h-4 stroke-[2.2]" />
+            </span>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold font-serif">
+                북핏(BookFit) AI 맞춤 독후 가이드 & 어휘 퀴즈
+              </h3>
+              <p className="text-[11px] text-cream-card/80">
+                18년 차 전문가 AI 기반 독서 대화 & 어휘 퀴즈 생성
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleToggleSaveBook}
+              className="p-2 text-cream-card hover:text-white rounded-full hover:bg-forest-light transition-colors"
+              title="내 서재에 담기"
+            >
+              <Heart className={`w-5 h-5 ${isSaved ? 'fill-red-400 text-red-400' : ''}`} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 text-cream-card hover:text-white rounded-full hover:bg-forest-light transition-colors"
+              title="닫기 (Esc)"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Scroll Content Area */}
+        <div className="p-6 sm:p-8 overflow-y-auto space-y-6 flex-1">
+          
+          {/* Section 1: Book Info Top Grid */}
+          <div className="grid sm:grid-cols-12 gap-6 items-start">
+            
+            {/* Book Cover Box */}
+            <div className="sm:col-span-4 relative group mx-auto sm:mx-0 max-w-[200px] sm:max-w-none">
+              <BookCoverImage
+                src={book.coverImage}
+                alt={book.title}
+                className="w-full h-60 object-cover rounded-2xl shadow-elevated border-2 border-oak/30 group-hover:scale-102 transition-transform duration-300"
+              />
+              <div className="mt-2.5 flex items-center justify-center gap-1.5 text-xs text-oak-dark font-bold bg-cream-card py-1.5 rounded-xl border border-oak/20">
+                <Star className="w-4 h-4 fill-oak text-oak" />
+                <span>북핏 평점 {book.rating}</span>
+                <span className="text-charcoal-muted font-normal">/ 5.0</span>
+              </div>
+            </div>
+
+            {/* Book Meta Details */}
+            <div className="sm:col-span-8 space-y-3">
+              
+              {/* Badges */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`text-xs font-bold px-3 py-1 rounded-full border ${trackBadgeColors[book.trackType]}`}>
+                  {trackNames[book.trackType]}
+                </span>
+                <span className="text-xs font-bold text-oak-dark bg-oak/15 border border-oak/30 px-3 py-1 rounded-full">
+                  {book.lexileLevel}
+                </span>
+                <span className="text-xs font-semibold text-charcoal-muted bg-cream-dark px-2.5 py-1 rounded-md">
+                  {book.gradeTag}
+                </span>
+              </div>
+
+              {/* Title & Author */}
+              <div>
+                <h2 className="text-2xl font-bold font-serif text-charcoal leading-snug">
+                  {book.title}
+                </h2>
+                <p className="text-xs text-charcoal-muted font-medium mt-1">
+                  저자: {book.author} | 출판사: {book.publisher}
+                </p>
+              </div>
+
+              {/* Summary Box */}
+              <div className="p-4 bg-cream-card/70 rounded-2xl border border-oak/20 space-y-1">
+                <span className="text-[10px] font-bold text-forest uppercase tracking-wider block">
+                  [줄거리 & 서평 요약]
+                </span>
+                <p className="text-xs sm:text-sm text-charcoal leading-relaxed">
+                  {book.summary}
+                </p>
+              </div>
+
+              {/* Recommend Reason */}
+              <div className="p-3 bg-forest/5 rounded-xl border border-forest/15 space-y-1">
+                <p className="text-xs font-bold text-forest flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-oak" />
+                  북핏 연구소 큐레이션 추천 사유
+                </p>
+                <p className="text-xs text-charcoal font-medium italic">
+                  "{book.recommendReason}"
+                </p>
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* Section 2: Tabbed AI Section (Parents Guide, Quiz, Vocab) */}
+          <div className="space-y-4 pt-4 border-t border-cream-dark">
+            
+            {/* Tab Controls */}
+            <div className="flex border-b border-oak/30 text-xs font-bold">
+              <button
+                onClick={() => setActiveTab('questions')}
+                className={`px-4 py-2.5 border-b-2 transition-all flex items-center gap-1.5 ${
+                  activeTab === 'questions'
+                    ? 'border-forest text-forest bg-forest/5'
+                    : 'border-transparent text-charcoal-muted hover:text-charcoal'
+                }`}
+              >
+                <HelpCircle className="w-4 h-4 text-oak-dark" />
+                AI 부모 독후 대화 가이드 (3단계)
+              </button>
+              <button
+                onClick={() => setActiveTab('quiz')}
+                className={`px-4 py-2.5 border-b-2 transition-all flex items-center gap-1.5 ${
+                  activeTab === 'quiz'
+                    ? 'border-forest text-forest bg-forest/5'
+                    : 'border-transparent text-charcoal-muted hover:text-charcoal'
+                }`}
+              >
+                <Brain className="w-4 h-4 text-forest" />
+                아이용 어휘 퀴즈
+              </button>
+              <button
+                onClick={() => setActiveTab('vocab')}
+                className={`px-4 py-2.5 border-b-2 transition-all flex items-center gap-1.5 ${
+                  activeTab === 'vocab'
+                    ? 'border-forest text-forest bg-forest/5'
+                    : 'border-transparent text-charcoal-muted hover:text-charcoal'
+                }`}
+              >
+                <BookOpen className="w-4 h-4 text-forest" />
+                핵심 어휘 리포트
+              </button>
+            </div>
+
+            {/* AI Loading State */}
+            {isLoadingAI && (
+              <div className="py-10 text-center space-y-2 bg-cream-card rounded-2xl border border-oak/20">
+                <Loader2 className="w-7 h-7 text-forest animate-spin mx-auto" />
+                <p className="text-xs font-bold text-forest">
+                  18년 차 아동 언어재활사 AI가 맞춤 독후 질문과 어휘 퀴즈를 심도 있게 구성 중입니다...
+                </p>
+              </div>
+            )}
+
+            {/* Tab 1: AI 3-Stage Parent Discussion Guide Cards */}
+            {!isLoadingAI && activeTab === 'questions' && aiGuide && (
+              <div className="space-y-3 pt-1">
+                <div className="p-3 bg-oak/10 rounded-xl text-xs text-charcoal-dark font-medium flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-oak-dark shrink-0" />
+                  <span>이 책을 읽기 전·중·후 세 단계로 나누어 아이의 사고력을 자연스럽게 이끌어주세요.</span>
+                </div>
+
+                <div className="grid sm:grid-cols-3 gap-4">
+                  {/* Before */}
+                  <div className="p-4 bg-[#FAF5EB] rounded-2xl border border-oak/30 space-y-2">
+                    <span className="text-[10px] font-bold text-forest bg-forest/15 px-2.5 py-0.5 rounded-full inline-block">
+                      1. 읽기 전 (Before)
+                    </span>
+                    {aiGuide.beforeReading.map((q, idx) => (
+                      <p key={idx} className="text-xs text-charcoal font-medium leading-relaxed italic">
+                        "{q}"
+                      </p>
+                    ))}
+                  </div>
+
+                  {/* During */}
+                  <div className="p-4 bg-[#FAF5EB] rounded-2xl border border-oak/30 space-y-2">
+                    <span className="text-[10px] font-bold text-oak-dark bg-oak/20 px-2.5 py-0.5 rounded-full inline-block">
+                      2. 읽는 중 (During)
+                    </span>
+                    {aiGuide.duringReading.slice(0, 2).map((q, idx) => (
+                      <p key={idx} className="text-xs text-charcoal font-medium leading-relaxed italic">
+                        "{q}"
+                      </p>
+                    ))}
+                  </div>
+
+                  {/* After */}
+                  <div className="p-4 bg-[#FAF5EB] rounded-2xl border border-oak/30 space-y-2">
+                    <span className="text-[10px] font-bold text-charcoal bg-charcoal/10 px-2.5 py-0.5 rounded-full inline-block">
+                      3. 읽은 후 (After)
+                    </span>
+                    {aiGuide.afterReading.slice(0, 2).map((q, idx) => (
+                      <p key={idx} className="text-xs text-charcoal font-medium leading-relaxed italic">
+                        "{q}"
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 2: AI Vocabulary Quiz */}
+            {!isLoadingAI && activeTab === 'quiz' && aiGuide && (
+              <div className="space-y-4 pt-1">
+                <div className="p-3 bg-forest/10 rounded-xl text-xs text-forest font-semibold flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-forest shrink-0" />
+                  <span>이 책에서 추출된 핵심 어휘 퀴즈를 풀어보세요!</span>
+                </div>
+
+                <div className="space-y-3">
+                  {aiGuide.vocabularyQuiz.map((quiz, qIdx) => (
+                    <div key={qIdx} className="p-4 bg-cream-card rounded-2xl border border-oak/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-forest bg-forest/15 px-2.5 py-0.5 rounded">
+                          어휘: {quiz.word}
+                        </span>
+                        <span className="text-[11px] text-charcoal-muted">{quiz.meaning}</span>
+                      </div>
+                      <p className="text-xs font-bold text-charcoal mt-1">
+                        Q{qIdx + 1}. {quiz.question}
+                      </p>
+
+                      {quiz.options && (
+                        <div className="grid sm:grid-cols-3 gap-2 pt-2">
+                          {quiz.options.map((opt, oIdx) => {
+                            const isSelected = selectedQuizAnswers[qIdx] === oIdx;
+                            const isCorrect = quiz.answerIndex === oIdx;
+                            return (
+                              <button
+                                key={oIdx}
+                                onClick={() => handleQuizSelect(qIdx, oIdx)}
+                                className={`p-2.5 rounded-xl border text-xs font-medium transition-all text-left ${
+                                  isSelected
+                                    ? isCorrect
+                                      ? 'bg-forest/20 border-forest text-forest font-bold'
+                                      : 'bg-red-100 border-red-400 text-red-600'
+                                    : 'bg-cream-light border-oak/30 hover:bg-cream'
+                                }`}
+                              >
+                                {oIdx + 1}. {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tab 3: Vocabulary Key Points */}
+            {!isLoadingAI && activeTab === 'vocab' && (
+              <div className="p-5 bg-cream-card rounded-2xl border border-oak/20 space-y-3">
+                <h4 className="text-xs font-bold text-forest uppercase tracking-wider flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-oak" />
+                  이 책의 핵심 어휘 포인트 (Vocabulary Keys)
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {book.vocabularyPoints.map((word, idx) => (
+                    <span
+                      key={idx}
+                      className="text-xs font-bold text-forest bg-forest/10 border border-forest/20 px-3.5 py-1.5 rounded-xl"
+                    >
+                      # {word}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-charcoal-muted leading-relaxed pt-1">
+                  이 책을 읽으며 위 어휘들의 실제 사용 문맥을 익히면 교과 어휘력 확장에 큰 도움이 됩니다.
+                </p>
+              </div>
+            )}
+
+          </div>
+
+        </div>
+
+        {/* Modal Action Footer */}
+        <div className="p-5 bg-cream-card border-t border-cream-dark space-y-2">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            
+            {/* Coupang Partners Base URL Link Button */}
+            <button
+              onClick={handleCoupangBuy}
+              className="w-full sm:w-auto px-5 py-2.5 bg-[#D62828] hover:bg-[#B71C1C] text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 group cursor-pointer"
+            >
+              <ShoppingBag className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+              <span>쿠팡에서 최저가 구매하기</span>
+              <ExternalLink className="w-3.5 h-3.5 text-white/80" />
+            </button>
+
+            {/* Right Main Actions */}
+            <div className="w-full sm:w-auto flex items-center gap-2">
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenDiagnosis();
+                }}
+                className="w-1/2 sm:w-auto px-4 py-2.5 bg-cream-light border border-forest/30 text-forest hover:bg-forest/10 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1"
+              >
+                <span>맞춤 진단 받기</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                onClick={() => setIsSaved(!isSaved)}
+                className={`w-1/2 sm:w-auto px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-2 ${
+                  isSaved
+                    ? 'bg-oak-dark hover:bg-oak'
+                    : 'bg-forest hover:bg-forest-dark'
+                }`}
+              >
+                {isSaved ? (
+                  <>
+                    <BookmarkCheck className="w-4 h-4 text-white" />
+                    <span>내 서재 등록 완료</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-oak" />
+                    <span>내 서재에 읽을 책으로 등록</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
+
+          {/* Mandatory Disclosure Notice */}
+          <p className="text-[11px] text-charcoal-muted leading-tight text-center sm:text-left font-light pt-1">
+            ※ 이 링크를 통해 구매 시 쿠팡 파트너스 활동의 일환으로 일정액의 수수료를 제공받습니다.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  );
+};
