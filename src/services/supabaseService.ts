@@ -389,32 +389,96 @@ export async function saveCuratedBookToDb(
 }
 
 export async function fetchCuratedBooksFromDb(): Promise<Book[]> {
+  const mergedBooks: Book[] = [];
+
+  // 1. Fetch from `books` table
   try {
-    const { data, error } = await supabase.from('books').select('*').order('created_at', { ascending: false });
+    const { data: booksData } = await supabase
+      .from('books')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-    if (error || !data || data.length === 0) {
-      return [];
+    if (booksData && Array.isArray(booksData)) {
+      booksData.forEach((item: any) => {
+        const track = (item.track_type || item.trackType || item.level || item.step_type || 'comfort') as
+          | 'comfort'
+          | 'challenge'
+          | 'supplement';
+
+        mergedBooks.push({
+          id: String(item.id),
+          title: item.title || '제목 없음',
+          author: item.author || '저자 미상',
+          publisher: item.publisher || '출판사',
+          coverImage:
+            item.cover_image ||
+            item.cover_url ||
+            item.image_url ||
+            item.coverImage ||
+            'https://image.aladin.co.kr/product/572/93/cover500/8949161358_1.jpg',
+          gradeTag: item.grade_tag || item.gradeTag || '전 학년',
+          lexileLevel: item.lexile_level || item.lexileLevel || '어휘 L3 (맞춤)',
+          trackType: track,
+          recommendReason: item.recommend_reason || item.recommendReason || '북핏 연구소 큐레이션 추천 도서',
+          summary: item.summary || item.description || '어린이 문해력 성장에 도움을 주는 도서입니다.',
+          vocabularyPoints: item.vocabulary_points || item.vocabularyPoints || ['어휘력', '독해력'],
+          parentQuestions: item.parent_questions || item.parentQuestions || ['이 책을 읽고 어떤 느낌이 들었나요?'],
+          rating: Number(item.rating) || 4.9,
+        });
+      });
     }
-
-    return data.map((item: any) => ({
-      id: String(item.id),
-      title: item.title || '제목 없음',
-      author: item.author || '저자 미상',
-      publisher: item.publisher || '출판사',
-      coverImage: item.cover_image || item.coverImage || 'https://image.aladin.co.kr/product/572/93/cover500/8949161358_1.jpg',
-      gradeTag: item.grade_tag || item.gradeTag || '전 학년',
-      lexileLevel: item.lexile_level || item.lexileLevel || '어휘 L3 (맞춤)',
-      trackType: (item.track_type || item.trackType || 'comfort') as 'comfort' | 'challenge' | 'supplement',
-      recommendReason: item.recommend_reason || item.recommendReason || '북핏 연구소 큐레이션 추천 도서',
-      summary: item.summary || '어린이 문해력 성장에 도움을 주는 도서입니다.',
-      vocabularyPoints: item.vocabulary_points || item.vocabularyPoints || ['어휘력', '독해력'],
-      parentQuestions: item.parent_questions || item.parentQuestions || ['이 책을 읽고 어떤 느낌이 들었나요?'],
-      rating: Number(item.rating) || 4.9,
-    }));
   } catch (err) {
-    console.error('Error fetching curated books from DB:', err);
-    return [];
+    console.warn('Querying public.books table failed:', err);
   }
+
+  // 2. Fetch from `my_library` table to guarantee 100% data presence
+  try {
+    const { data: libraryData } = await supabase
+      .from('my_library')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (libraryData && Array.isArray(libraryData)) {
+      libraryData.forEach((item: any) => {
+        const titleTrimmed = (item.title || '').trim().toLowerCase();
+        const isDuplicate = mergedBooks.some(
+          (b) => b.id === String(item.id) || b.title.trim().toLowerCase() === titleTrimmed
+        );
+
+        if (!isDuplicate) {
+          const track = (item.track_type || item.trackType || item.level || 'comfort') as
+            | 'comfort'
+            | 'challenge'
+            | 'supplement';
+
+          mergedBooks.push({
+            id: String(item.id || item.isbn || Math.random().toString()),
+            title: item.title || '제목 없음',
+            author: item.author || '저자 미상',
+            publisher: item.publisher || '출판사',
+            coverImage:
+              item.cover_image ||
+              item.cover_url ||
+              item.image_url ||
+              item.coverImage ||
+              'https://image.aladin.co.kr/product/572/93/cover500/8949161358_1.jpg',
+            gradeTag: item.grade_tag || item.gradeTag || '전 학년',
+            lexileLevel: item.lexile_level || item.lexileLevel || '어휘 L3 (맞춤)',
+            trackType: track,
+            recommendReason: item.recommend_reason || item.recommendReason || '북핏 연구소 큐레이션 추천 도서',
+            summary: item.summary || item.description || '어린이 문해력 성장에 도움을 주는 도서입니다.',
+            vocabularyPoints: item.vocabulary_points || item.vocabularyPoints || ['어휘력', '독해력'],
+            parentQuestions: item.parent_questions || item.parentQuestions || ['이 책을 읽고 어떤 느낌이 들었나요?'],
+            rating: Number(item.rating) || 4.9,
+          });
+        }
+      });
+    }
+  } catch (err) {
+    console.warn('Querying public.my_library table failed:', err);
+  }
+
+  return mergedBooks;
 }
 
 /**

@@ -260,7 +260,10 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
       {/* Curation Shelf Manager Admin Modal */}
       <CurationManagerModal
         isOpen={isManagerOpen}
-        onClose={() => setIsManagerOpen(false)}
+        onClose={() => {
+          setIsManagerOpen(false);
+          loadBookshelfData();
+        }}
         onBookAdded={loadBookshelfData}
       />
     </section>
