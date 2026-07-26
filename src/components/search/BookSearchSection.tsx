@@ -14,6 +14,7 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string>('전체');
   const [selectedLexileLevel, setSelectedLexileLevel] = useState<string>('all');
+  const [rawDbBooks, setRawDbBooks] = useState<Book[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [savedBookIds, setSavedBookIds] = useState<Set<string>>(new Set());
@@ -39,24 +40,38 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
     { id: 'L6', label: 'L6 (심화)' },
   ];
 
-  // Trigger search or initial DB fetch on query change
+  // 1. Initial Data Fetching on Mount (useEffect with [])
   useEffect(() => {
+    const fetchInitialDbBooks = async () => {
+      setIsLoading(true);
+      const data = await fetchCuratedBooksFromDb();
+      console.log('불러온 전체 DB 도서 개수:', data.length);
+      setRawDbBooks(data);
+      setBooks(data);
+      setIsLoading(false);
+    };
+
+    fetchInitialDbBooks();
+  }, []);
+
+  // 2. Keyword Search Trigger (Only when searchQuery is active)
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setBooks(rawDbBooks);
+      return;
+    }
+
     const timer = setTimeout(async () => {
       setIsLoading(true);
-      if (searchQuery.trim() === '') {
-        const dbBooks = await fetchCuratedBooksFromDb();
-        setBooks(dbBooks);
-      } else {
-        const results = await searchAladinBooks(searchQuery);
-        setBooks(results);
-      }
+      const results = await searchAladinBooks(searchQuery);
+      setBooks(results);
       setIsLoading(false);
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, rawDbBooks]);
 
-  // Filter books by Tag & Lexile level (with Filter Bypass for '전체' / 'all')
+  // 3. Filter books by Tag & Lexile level (Filter Bypass applied)
   const filteredBooks = books.filter((book) => {
     const matchTag =
       !selectedTag ||
@@ -77,6 +92,11 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
 
     return matchTag && matchLexile;
   });
+
+  // Log filtered books count
+  useEffect(() => {
+    console.log('현재 표시할 filteredBooks:', filteredBooks.length, filteredBooks);
+  }, [filteredBooks]);
 
   const toggleSaveBook = (bookId: string, e: React.MouseEvent) => {
     e.stopPropagation();
