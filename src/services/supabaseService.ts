@@ -402,6 +402,34 @@ export async function saveCuratedBookToDb(
           isbnError.code === 'PGRST205' ||
           isbnError.code === '42P01'
         ) {
+          console.info(
+            `💡 [Supabase SQL DDL Query]\nRun the following SQL in Supabase SQL Editor to create public.books table:\n\n` +
+            `CREATE TABLE IF NOT EXISTS public.books (\n` +
+            `    id TEXT PRIMARY KEY,\n` +
+            `    isbn TEXT,\n` +
+            `    title TEXT NOT NULL,\n` +
+            `    author TEXT,\n` +
+            `    publisher TEXT,\n` +
+            `    cover_image TEXT,\n` +
+            `    cover_url TEXT,\n` +
+            `    image_url TEXT,\n` +
+            `    summary TEXT,\n` +
+            `    description TEXT,\n` +
+            `    step_level TEXT,\n` +
+            `    track_type TEXT,\n` +
+            `    level TEXT,\n` +
+            `    grade_tag TEXT,\n` +
+            `    lexile_level TEXT,\n` +
+            `    recommend_reason TEXT,\n` +
+            `    vocabulary_points JSONB,\n` +
+            `    parent_questions JSONB,\n` +
+            `    rating NUMERIC DEFAULT 4.9,\n` +
+            `    created_at TIMESTAMPTZ DEFAULT NOW(),\n` +
+            `    updated_at TIMESTAMPTZ DEFAULT NOW()\n` +
+            `);\n` +
+            `ALTER TABLE public.books ENABLE ROW LEVEL SECURITY;\n` +
+            `CREATE POLICY "Allow public all on books" ON public.books FOR ALL USING (true) WITH CHECK (true);`
+          );
           return { success: true };
         }
       }
