@@ -212,24 +212,38 @@ export function mapAladinToBookFit(aladinItem: AladinItem): Book {
 
 // Fetch helper with API Key & CORS Proxy fallback
 export async function searchAladinBooks(query: string): Promise<Book[]> {
-  const ttbKey =
-    (import.meta.env &&
-      (import.meta.env.VITE_ALADIN_TTB_KEY || import.meta.env.NEXT_PUBLIC_ALADIN_TTB_KEY)) ||
-    'ttbhyunjuncho8001648001'; // Default public client TTB Key fallback
-
   if (query.trim() === '') {
     return ALADIN_CHILDREN_MOCK_BOOKS;
   }
+
+  // 1st attempt: Call internal Serverless / Proxy API Route /api/aladdin
+  const serverApiUrl = `/api/aladdin?query=${encodeURIComponent(query)}&maxResults=12`;
+
+  try {
+    const res = await fetch(serverApiUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.item && Array.isArray(data.item)) {
+        return data.item.map((item: AladinItem) => mapAladinToBookFit(item));
+      }
+    }
+  } catch (err) {
+    console.error('Single search via /api/aladdin failed:', err);
+  }
+
+  // Fallback to direct CORS proxies
+  const ttbKey =
+    (import.meta.env &&
+      (import.meta.env.VITE_ALADIN_TTB_KEY || import.meta.env.NEXT_PUBLIC_ALADIN_TTB_KEY)) ||
+    'ttbhyunjuncho8001648001';
 
   const rawUrl = `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(
     query
   )}&QueryType=Keyword&MaxResults=12&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
 
-  // Proxy URLs to prevent browser CORS block
   const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`;
 
   try {
-    // 1st attempt: direct fetch or proxy fetch
     let res = await fetch(rawUrl).catch(() => null);
     if (!res || !res.ok) {
       res = await fetch(proxyUrl);
@@ -242,71 +256,84 @@ export async function searchAladinBooks(query: string): Promise<Book[]> {
       }
     }
   } catch (err) {
-    console.warn('Aladin API fetch failed, fallback to BookFit dataset filter:', err);
+    console.error('Aladin direct API fetch failed:', err);
   }
 
-  // Fallback filtering over mock dataset
-  return ALADIN_CHILDREN_MOCK_BOOKS.filter(
-    (b) =>
-      b.title.toLowerCase().includes(query.toLowerCase()) ||
-      b.author.toLowerCase().includes(query.toLowerCase()) ||
-      b.summary.toLowerCase().includes(query.toLowerCase()) ||
-      b.vocabularyPoints.some((v) => v.toLowerCase().includes(query.toLowerCase()))
-  );
+  return [];
 }
 
 /**
- * Fetch 30 Books at once by Grade / Category from Aladin Open API (Strict 100% Live Payload, Zero Mock Fallback)
+ * Fetch 30 Books at once by Grade / Category from Aladin Open API via Server API Route /api/aladdin
  */
 export async function fetchAladinCategoryBooks(
   category: 'low' | 'mid' | 'high' | 'bestseller' = 'low'
 ): Promise<Book[]> {
+  let categoryId = '51100';
+  let queryType = 'ItemNewAll';
+  let gradeLabel = '초등 1~2학년';
+  let lexileTag = '어휘 L2 (기초 몰입)';
+
+  if (category === 'low') {
+    categoryId = '51100';
+    queryType = 'ItemNewAll';
+    gradeLabel = '초등 1~2학년';
+    lexileTag = '어휘 L2 (기초 몰입)';
+  } else if (category === 'mid') {
+    categoryId = '51101';
+    queryType = 'ItemNewAll';
+    gradeLabel = '초등 3~4학년';
+    lexileTag = '어휘 L3 (감정 확장)';
+  } else if (category === 'high') {
+    categoryId = '51102';
+    queryType = 'ItemNewAll';
+    gradeLabel = '초등 5~6학년';
+    lexileTag = '어휘 L5 (비판 사고)';
+  } else if (category === 'bestseller') {
+    categoryId = '1108';
+    queryType = 'Bestseller';
+    gradeLabel = '초등 전학년';
+    lexileTag = '어휘 L4 (서사 몰입)';
+  }
+
+  // Primary Endpoint: Internal Serverless / Proxy Route /api/aladdin
+  const serverApiUrl = `/api/aladdin?categoryId=${categoryId}&queryType=${queryType}&maxResults=30`;
+
+  try {
+    const res = await fetch(serverApiUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.item && Array.isArray(data.item) && data.item.length > 0) {
+        return data.item.map((item: AladinItem) => {
+          const mapped = mapAladinToBookFit(item);
+          return {
+            ...mapped,
+            gradeTag: gradeLabel,
+            lexileLevel: lexileTag,
+          };
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Fetch via /api/aladdin failed, attempting proxy fallbacks:', err);
+  }
+
+  // Backup Endpoints via CORS proxies
   const ttbKey =
     (import.meta.env &&
       (import.meta.env.VITE_ALADIN_TTB_KEY || import.meta.env.NEXT_PUBLIC_ALADIN_TTB_KEY)) ||
     'ttbhyunjuncho8001648001';
 
-  let rawUrl = '';
-  let gradeLabel = '초등 1~2학년';
-  let lexileTag = '어휘 L2 (기초 몰입)';
-
-  if (category === 'low') {
-    gradeLabel = '초등 1~2학년';
-    lexileTag = '어휘 L2 (기초 몰입)';
-    rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=ItemNewAll&CategoryId=51100&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
-  } else if (category === 'mid') {
-    gradeLabel = '초등 3~4학년';
-    lexileTag = '어휘 L3 (감정 확장)';
-    rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=ItemNewAll&CategoryId=51101&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
-  } else if (category === 'high') {
-    gradeLabel = '초등 5~6학년';
-    lexileTag = '어휘 L5 (비판 사고)';
-    rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=ItemNewAll&CategoryId=51102&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
-  } else if (category === 'bestseller') {
-    gradeLabel = '초등 전학년';
-    lexileTag = '어휘 L4 (서사 몰입)';
-    rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=Bestseller&CategoryId=1108&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
-  }
-
-  // Backup ItemSearch URL using exact CategoryId
-  const categoryId = category === 'low' ? '51100' : category === 'mid' ? '51101' : category === 'high' ? '51102' : '1108';
-  const searchQuery = category === 'low' ? '초등 1학년 2학년 동화' : category === 'mid' ? '초등 3학년 4학년 문학' : category === 'high' ? '초등 5학년 6학년 소설' : '어린이 동화';
-  
-  const fallbackSearchUrl = `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(
-    searchQuery
-  )}&QueryType=Keyword&CategoryId=${categoryId}&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
+  const rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=${queryType}&CategoryId=${categoryId}&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
 
   const proxies = [
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
   ];
 
-  const targetUrls = [rawUrl, fallbackSearchUrl];
-
-  for (const targetUrl of targetUrls) {
-    // Attempt 1: Direct fetch
+  for (const proxyFn of proxies) {
     try {
-      const res = await fetch(targetUrl);
+      const proxyUrl = proxyFn(rawUrl);
+      const res = await fetch(proxyUrl);
       if (res.ok) {
         const data = await res.json();
         if (data && data.item && Array.isArray(data.item) && data.item.length > 0) {
@@ -320,35 +347,11 @@ export async function fetchAladinCategoryBooks(
           });
         }
       }
-    } catch (e) {
-      // Direct fetch blocked by CORS, try proxies
-    }
-
-    // Attempt 2: CORS Proxy fetch
-    for (const proxyFn of proxies) {
-      try {
-        const proxyUrl = proxyFn(targetUrl);
-        const res = await fetch(proxyUrl);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.item && Array.isArray(data.item) && data.item.length > 0) {
-            return data.item.map((item: AladinItem) => {
-              const mapped = mapAladinToBookFit(item);
-              return {
-                ...mapped,
-                gradeTag: gradeLabel,
-                lexileLevel: lexileTag,
-              };
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('Aladin API Proxy fetch attempt failed:', err);
-      }
+    } catch (err) {
+      console.error('Aladin Proxy Fetch Error:', err);
     }
   }
 
-  // Strict Zero Mock Fallback: Return empty array on failure instead of mock dataset!
-  console.warn('Aladin Open API Live fetch returned no results.');
+  console.error('All Aladin API fetch endpoints failed. Returning empty list.');
   return [];
 }

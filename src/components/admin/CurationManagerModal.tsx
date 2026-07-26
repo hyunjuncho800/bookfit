@@ -383,6 +383,15 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
                 알라딘 Open API에서 {selectedCategory === 'low' ? '초등 저학년' : selectedCategory === 'mid' ? '초등 중학년' : selectedCategory === 'high' ? '초등 고학년' : '베스트셀러'} 30권을 조회하고 있습니다...
               </p>
             </div>
+          ) : searchResults.length === 0 ? (
+            <div className="py-16 text-center space-y-3 bg-cream-card/40 rounded-2xl border border-red-200">
+              <p className="text-sm text-red-600 font-bold font-serif">
+                도서를 불러오는 중 오류가 발생했거나 해당 카테고리 도서가 없습니다.
+              </p>
+              <p className="text-xs text-charcoal-muted">
+                네트워크 연결 상태나 알라딘 API 키 설정을 확인 후 다시 시도해 주세요.
+              </p>
+            </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {searchResults.map((book) => {
