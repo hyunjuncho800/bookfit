@@ -239,7 +239,7 @@ export async function searchAladinBooks(query: string): Promise<Book[]> {
 
   const rawUrl = `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(
     query
-  )}&QueryType=Keyword&MaxResults=12&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
+  )}&QueryType=Keyword&MaxResults=12&start=1&SearchTarget=Book&output=js&Version=20131101`;
 
   const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`;
 
@@ -353,7 +353,7 @@ export async function fetchAladinCategoryBooksWithDebug(
       (import.meta.env.VITE_ALADIN_TTB_KEY || import.meta.env.NEXT_PUBLIC_ALADIN_TTB_KEY)) ||
     'ttbfrisjune1646001';
 
-  const rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=${queryType}&CategoryId=${categoryId}&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
+  const rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=${queryType}&CategoryId=${categoryId}&MaxResults=30&start=1&SearchTarget=Book&output=js&Version=20131101`;
 
   const proxies = [
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,

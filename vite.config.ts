@@ -21,9 +21,9 @@ export default defineConfig({
           const ttbKey = process.env.VITE_ALADIN_TTB_KEY || process.env.NEXT_PUBLIC_ALADIN_TTB_KEY || 'ttbfrisjune1646001';
 
           if (query) {
-            return `/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(query)}&QueryType=Keyword&CategoryId=${categoryId}&MaxResults=${maxResults}&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
+            return `/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(query)}&QueryType=Keyword&CategoryId=${categoryId}&MaxResults=${maxResults}&start=1&SearchTarget=Book&output=js&Version=20131101`;
           } else {
-            return `/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=${queryType}&CategoryId=${categoryId}&MaxResults=${maxResults}&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
+            return `/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=${queryType}&CategoryId=${categoryId}&MaxResults=${maxResults}&start=1&SearchTarget=Book&output=js&Version=20131101`;
           }
         },
       },

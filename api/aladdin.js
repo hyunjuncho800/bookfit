@@ -17,9 +17,9 @@ export default async function handler(req, res) {
   if (query && query.trim() !== '') {
     aladinUrl = `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(
       query
-    )}&QueryType=Keyword&CategoryId=${categoryId}&MaxResults=${maxResults}&start=${start}&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
+    )}&QueryType=Keyword&CategoryId=${categoryId}&MaxResults=${maxResults}&start=${start}&SearchTarget=Book&output=js&Version=20131101`;
   } else {
-    aladinUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=${queryType}&CategoryId=${categoryId}&MaxResults=${maxResults}&start=${start}&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
+    aladinUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=${queryType}&CategoryId=${categoryId}&MaxResults=${maxResults}&start=${start}&SearchTarget=Book&output=js&Version=20131101`;
   }
 
   // CORS Header helper
