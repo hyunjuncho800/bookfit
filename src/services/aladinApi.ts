@@ -210,10 +210,12 @@ export function mapAladinToBookFit(aladinItem: AladinItem): Book {
   };
 }
 
+import { fetchCuratedBooksFromDb } from './supabaseService';
+
 // Fetch helper with API Key & CORS Proxy fallback
 export async function searchAladinBooks(query: string): Promise<Book[]> {
   if (query.trim() === '') {
-    return ALADIN_CHILDREN_MOCK_BOOKS;
+    return await fetchCuratedBooksFromDb();
   }
 
   // 1st attempt: Call internal Serverless / Proxy API Route /api/aladdin

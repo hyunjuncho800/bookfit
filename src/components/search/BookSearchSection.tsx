@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { searchAladinBooks, ALADIN_CHILDREN_MOCK_BOOKS } from '../../services/aladinApi';
+import { searchAladinBooks } from '../../services/aladinApi';
+import { fetchCuratedBooksFromDb } from '../../services/supabaseService';
 import type { Book } from '../../types';
 import { Search, Database, Star, Heart, BookOpen, ChevronRight, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { BookCoverImage } from '../common/BookCoverImage';
@@ -13,8 +14,8 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string>('전체');
   const [selectedLexileLevel, setSelectedLexileLevel] = useState<string>('all');
-  const [books, setBooks] = useState<Book[]>(ALADIN_CHILDREN_MOCK_BOOKS);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [books, setBooks] = useState<Book[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [savedBookIds, setSavedBookIds] = useState<Set<string>>(new Set());
 
   // Category Tag Presets
@@ -38,14 +39,19 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
     { id: 'L6', label: 'L6 (심화)' },
   ];
 
-  // Trigger search on query change
+  // Trigger search or initial DB fetch on query change
   useEffect(() => {
     const timer = setTimeout(async () => {
       setIsLoading(true);
-      const results = await searchAladinBooks(searchQuery);
-      setBooks(results);
+      if (searchQuery.trim() === '') {
+        const dbBooks = await fetchCuratedBooksFromDb();
+        setBooks(dbBooks);
+      } else {
+        const results = await searchAladinBooks(searchQuery);
+        setBooks(results);
+      }
       setIsLoading(false);
-    }, 300);
+    }, 250);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -295,10 +301,12 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
           <div className="py-16 text-center bg-cream-light rounded-3xl border border-oak/30 p-8 space-y-3">
             <BookOpen className="w-10 h-10 text-oak mx-auto" />
             <h4 className="text-lg font-bold font-serif text-charcoal">
-              검색 조건에 맞는 도서를 찾지 못했습니다.
+              {searchQuery ? '검색 조건에 맞는 도서를 찾지 못했습니다.' : '등록된 큐레이션 도서가 없습니다.'}
             </h4>
             <p className="text-xs text-charcoal-muted">
-              검색어를 변경하거나 카테고리 필터를 '전체'로 재설정해보세요.
+              {searchQuery
+                ? "검색어를 변경하거나 카테고리 필터를 '전체'로 재설정해 보세요."
+                : "상단 메뉴의 [도서 큐레이션 관리자]를 통해 알라딘 추천 도서를 서가에 등록해 보세요."}
             </p>
             <button
               onClick={() => {
