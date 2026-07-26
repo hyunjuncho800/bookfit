@@ -14,7 +14,7 @@ export default defineConfig({
           // to /ttb/api/ItemList.aspx?... or /ttb/api/ItemSearch.aspx?...
           const urlObj = new URL('http://localhost' + path);
           const params = urlObj.searchParams;
-          const categoryId = params.get('categoryId') || '51100';
+          const categoryId = params.get('categoryId') || '1108';
           const queryType = params.get('queryType') || 'ItemNewAll';
           const maxResults = params.get('maxResults') || '30';
           const query = params.get('query') || '';

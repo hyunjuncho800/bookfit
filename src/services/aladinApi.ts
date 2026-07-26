@@ -281,33 +281,31 @@ export interface AladinFetchResult {
 export async function fetchAladinCategoryBooksWithDebug(
   category: 'low' | 'mid' | 'high' | 'bestseller' = 'low'
 ): Promise<AladinFetchResult> {
-  let categoryId = '51100';
-  let queryType = 'ItemNewAll';
+  // Enforce official Aladin Children Category ID 1108
+  const categoryId = '1108';
+  let queryType = 'Bestseller';
   let gradeLabel = '초등 1~2학년';
   let lexileTag = '어휘 L2 (기초 몰입)';
 
   if (category === 'low') {
-    categoryId = '51100';
     queryType = 'ItemNewAll';
     gradeLabel = '초등 1~2학년';
     lexileTag = '어휘 L2 (기초 몰입)';
   } else if (category === 'mid') {
-    categoryId = '51101';
     queryType = 'ItemNewAll';
     gradeLabel = '초등 3~4학년';
     lexileTag = '어휘 L3 (감정 확장)';
   } else if (category === 'high') {
-    categoryId = '51102';
     queryType = 'ItemNewAll';
     gradeLabel = '초등 5~6학년';
     lexileTag = '어휘 L5 (비판 사고)';
   } else if (category === 'bestseller') {
-    categoryId = '1108';
     queryType = 'Bestseller';
     gradeLabel = '초등 전학년';
     lexileTag = '어휘 L4 (서사 몰입)';
   }
 
+  // 1st Priority: Internal Serverless API Route /api/aladdin
   const serverApiUrl = `/api/aladdin?categoryId=${categoryId}&queryType=${queryType}&maxResults=30`;
 
   try {
@@ -315,23 +313,9 @@ export async function fetchAladinCategoryBooksWithDebug(
     const data = await res.json().catch(() => null);
 
     if (data) {
-      if (data.isAladinError || data.errorCode !== undefined || data.errorMessage) {
-        console.error('[Aladin API Debug Response]', data);
-        return {
-          books: [],
-          errorInfo: {
-            isAladinError: true,
-            errorCode: data.errorCode,
-            errorMessage: data.errorMessage || data.error || '알라딘 API 응답 에러 발생',
-            errorCodeName: data.errorCodeName,
-            ttbKeyPresent: data.ttbKeyPresent,
-            ttbKeyPrefix: data.ttbKeyPrefix,
-            url: data.url || serverApiUrl
-          }
-        };
-      }
-
-      if (data.item && Array.isArray(data.item) && data.item.length > 0) {
+      if (data.isAladinError || (data.errorCode !== undefined && data.errorCode !== 0) || data.errorMessage) {
+        console.warn('[Serverless API Debug Response]', data);
+      } else if (data.item && Array.isArray(data.item) && data.item.length > 0) {
         const books = data.item.map((item: AladinItem) => {
           const mapped = mapAladinToBookFit(item);
           return {
@@ -344,10 +328,10 @@ export async function fetchAladinCategoryBooksWithDebug(
       }
     }
   } catch (err: any) {
-    console.error('Fetch via /api/aladdin failed:', err);
+    console.warn('Fetch via /api/aladdin failed, switching to Stage 2 CORS proxy:', err);
   }
 
-  // Backup CORS proxies
+  // 2nd & 3rd Priority: Public CORS Proxies Fail-Safe
   const ttbKey =
     (import.meta.env &&
       (import.meta.env.VITE_ALADIN_TTB_KEY || import.meta.env.NEXT_PUBLIC_ALADIN_TTB_KEY)) ||
@@ -356,8 +340,8 @@ export async function fetchAladinCategoryBooksWithDebug(
   const rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=${queryType}&CategoryId=${categoryId}&MaxResults=30&start=1&SearchTarget=Book&output=js&Version=20131101`;
 
   const proxies = [
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
   ];
 
   for (const proxyFn of proxies) {
@@ -379,7 +363,7 @@ export async function fetchAladinCategoryBooksWithDebug(
         }
       }
     } catch (err) {
-      console.error('Aladin Proxy Fetch Error:', err);
+      console.warn('Public CORS Proxy Fetch attempt failed:', err);
     }
   }
 
@@ -387,7 +371,7 @@ export async function fetchAladinCategoryBooksWithDebug(
     books: [],
     errorInfo: {
       isAladinError: true,
-      errorMessage: '알라딘 API 모든 서버 및 프록시 엔드포인트 호출에 실패했습니다.',
+      errorMessage: '알라딘 API 서버사이드 및 2중 CORS 프록시 호출이 모두 차단되었습니다.',
       ttbKeyPresent: Boolean(ttbKey),
       ttbKeyPrefix: ttbKey ? ttbKey.substring(0, 7) + '...' : 'Missing',
       url: rawUrl
