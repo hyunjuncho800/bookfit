@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MOCK_BOOKS } from '../data/mockData';
 import type { Book } from '../types';
-import { Library, Star, Filter, Info, Sparkles } from 'lucide-react';
+import { Library, Star, Filter, Info, Sparkles, Database } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
+import { CurationManagerModal } from './admin/CurationManagerModal';
+import { fetchCuratedBooksFromDb } from '../services/supabaseService';
 
 interface BookshelfSectionProps {
   onSelectBook: (book: Book) => void;
@@ -12,8 +14,30 @@ interface BookshelfSectionProps {
 export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook, onOpenDiagnosis }) => {
   const [activeGradeFilter, setActiveGradeFilter] = useState<string>('all');
   const [activeTrackFilter, setActiveTrackFilter] = useState<string>('all');
+  const [dbBooks, setDbBooks] = useState<Book[]>([]);
+  const [isManagerOpen, setIsManagerOpen] = useState<boolean>(false);
 
-  const filteredBooks = MOCK_BOOKS.filter((book) => {
+  const loadBookshelfData = () => {
+    fetchCuratedBooksFromDb().then((fetched) => {
+      if (fetched && fetched.length > 0) {
+        setDbBooks(fetched);
+      }
+    });
+  };
+
+  useEffect(() => {
+    loadBookshelfData();
+  }, []);
+
+  // Merge MOCK_BOOKS and dbBooks without duplication
+  const allAvailableBooks = [...dbBooks];
+  MOCK_BOOKS.forEach((mockItem) => {
+    if (!allAvailableBooks.some((b) => b.id === mockItem.id || b.title === mockItem.title)) {
+      allAvailableBooks.push(mockItem);
+    }
+  });
+
+  const filteredBooks = allAvailableBooks.filter((book) => {
     const matchGrade =
       activeGradeFilter === 'all' || book.gradeTag.includes(activeGradeFilter);
     const matchTrack =
@@ -64,13 +88,23 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
             </p>
           </div>
 
-          <button
-            onClick={onOpenDiagnosis}
-            className="self-start md:self-auto px-5 py-2.5 bg-forest text-white hover:bg-forest-dark font-semibold text-xs rounded-xl shadow-md transition-all flex items-center gap-2"
-          >
-            <Sparkles className="w-4 h-4 text-oak" />
-            우리 아이 맞춤 서가 전체 받기
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+            <button
+              onClick={() => setIsManagerOpen(true)}
+              className="px-4 py-2.5 bg-oak/20 text-forest-dark hover:bg-oak/30 font-bold text-xs rounded-xl border border-oak/40 shadow-sm transition-all flex items-center gap-1.5"
+            >
+              <Database className="w-4 h-4 text-oak-dark" />
+              <span>알라딘 도서 서가 DB 등록 🛠️</span>
+            </button>
+
+            <button
+              onClick={onOpenDiagnosis}
+              className="px-5 py-2.5 bg-forest text-white hover:bg-forest-dark font-semibold text-xs rounded-xl shadow-md transition-all flex items-center gap-2"
+            >
+              <Sparkles className="w-4 h-4 text-oak" />
+              <span>우리 아이 맞춤 서가 전체 받기</span>
+            </button>
+          </div>
         </div>
 
         {/* Filter Bar */}
@@ -222,6 +256,13 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
         </div>
 
       </div>
+
+      {/* Curation Shelf Manager Admin Modal */}
+      <CurationManagerModal
+        isOpen={isManagerOpen}
+        onClose={() => setIsManagerOpen(false)}
+        onBookAdded={loadBookshelfData}
+      />
     </section>
   );
 };

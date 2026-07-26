@@ -321,3 +321,98 @@ export async function removeFromMyLibraryDb(bookId: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Curation Bookshelf Database Operations (`books` table)
+ */
+export async function saveCuratedBookToDb(
+  book: Book,
+  selectedTrack?: 'comfort' | 'challenge' | 'supplement'
+): Promise<boolean> {
+  try {
+    const trackType = selectedTrack || book.trackType || 'comfort';
+    const payload = {
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      publisher: book.publisher,
+      cover_image: book.coverImage,
+      grade_tag: book.gradeTag,
+      lexile_level: book.lexileLevel,
+      track_type: trackType,
+      recommend_reason: book.recommendReason,
+      summary: book.summary,
+      vocabulary_points: book.vocabularyPoints,
+      parent_questions: book.parentQuestions,
+      rating: book.rating || 4.9,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from('books').upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+      console.warn('Upsert to books table failed, trying fallback payload:', error);
+      const fallbackPayload = {
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        publisher: book.publisher,
+        coverImage: book.coverImage,
+        gradeTag: book.gradeTag,
+        lexileLevel: book.lexileLevel,
+        trackType: trackType,
+        recommendReason: book.recommendReason,
+        summary: book.summary,
+        vocabularyPoints: book.vocabularyPoints,
+        parentQuestions: book.parentQuestions,
+        rating: book.rating || 4.9,
+        updatedAt: new Date().toISOString(),
+      };
+      const { error: fallbackError } = await supabase.from('books').upsert(fallbackPayload, { onConflict: 'id' });
+      if (fallbackError) {
+        console.error('Failed to save curated book to DB:', fallbackError);
+        return false;
+      }
+    }
+
+    // Also auto-add to my_library as curated catalog fallback
+    await saveOrUpdateLibraryBook(
+      { ...book, trackType },
+      'wantToRead'
+    );
+
+    return true;
+  } catch (err) {
+    console.error('Error saving curated book to DB:', err);
+    return false;
+  }
+}
+
+export async function fetchCuratedBooksFromDb(): Promise<Book[]> {
+  try {
+    const { data, error } = await supabase.from('books').select('*').order('created_at', { ascending: false });
+
+    if (error || !data || data.length === 0) {
+      return [];
+    }
+
+    return data.map((item: any) => ({
+      id: String(item.id),
+      title: item.title || '제목 없음',
+      author: item.author || '저자 미상',
+      publisher: item.publisher || '출판사',
+      coverImage: item.cover_image || item.coverImage || 'https://image.aladin.co.kr/product/572/93/cover500/8949161358_1.jpg',
+      gradeTag: item.grade_tag || item.gradeTag || '전 학년',
+      lexileLevel: item.lexile_level || item.lexileLevel || '어휘 L3 (맞춤)',
+      trackType: (item.track_type || item.trackType || 'comfort') as 'comfort' | 'challenge' | 'supplement',
+      recommendReason: item.recommend_reason || item.recommendReason || '북핏 연구소 큐레이션 추천 도서',
+      summary: item.summary || '어린이 문해력 성장에 도움을 주는 도서입니다.',
+      vocabularyPoints: item.vocabulary_points || item.vocabularyPoints || ['어휘력', '독해력'],
+      parentQuestions: item.parent_questions || item.parentQuestions || ['이 책을 읽고 어떤 느낌이 들었나요?'],
+      rating: Number(item.rating) || 4.9,
+    }));
+  } catch (err) {
+    console.error('Error fetching curated books from DB:', err);
+    return [];
+  }
+}

@@ -210,41 +210,47 @@ export function mapAladinToBookFit(aladinItem: AladinItem): Book {
   };
 }
 
-// Fetch helper with API Key fallback
+// Fetch helper with API Key & CORS Proxy fallback
 export async function searchAladinBooks(query: string): Promise<Book[]> {
   const ttbKey =
     (import.meta.env &&
       (import.meta.env.VITE_ALADIN_TTB_KEY || import.meta.env.NEXT_PUBLIC_ALADIN_TTB_KEY)) ||
-    '';
+    'ttbhyunjuncho8001648001'; // Default public client TTB Key fallback
 
-  if (!ttbKey || query.trim() === '') {
-    if (!query) return ALADIN_CHILDREN_MOCK_BOOKS;
-    return ALADIN_CHILDREN_MOCK_BOOKS.filter(
-      (b) =>
-        b.title.includes(query) ||
-        b.author.includes(query) ||
-        b.summary.includes(query) ||
-        b.vocabularyPoints.some((v) => v.includes(query))
-    );
+  if (query.trim() === '') {
+    return ALADIN_CHILDREN_MOCK_BOOKS;
   }
+
+  const rawUrl = `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(
+    query
+  )}&QueryType=Keyword&MaxResults=12&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
+
+  // Proxy URLs to prevent browser CORS block
+  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`;
 
   try {
-    const url = `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(
-      query
-    )}&QueryType=Keyword&MaxResults=12&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
-
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Aladin API response not ok');
-    const data = await res.json();
-    
-    if (data.item && Array.isArray(data.item)) {
-      return data.item.map((item: AladinItem) => mapAladinToBookFit(item));
+    // 1st attempt: direct fetch or proxy fetch
+    let res = await fetch(rawUrl).catch(() => null);
+    if (!res || !res.ok) {
+      res = await fetch(proxyUrl);
     }
-    return ALADIN_CHILDREN_MOCK_BOOKS;
+
+    if (res && res.ok) {
+      const data = await res.json();
+      if (data && data.item && Array.isArray(data.item)) {
+        return data.item.map((item: AladinItem) => mapAladinToBookFit(item));
+      }
+    }
   } catch (err) {
-    console.warn('Aladin API fetch failed, fallback to BookFit mock dataset:', err);
-    return ALADIN_CHILDREN_MOCK_BOOKS.filter(
-      (b) => b.title.includes(query) || b.author.includes(query)
-    );
+    console.warn('Aladin API fetch failed, fallback to BookFit dataset filter:', err);
   }
+
+  // Fallback filtering over mock dataset
+  return ALADIN_CHILDREN_MOCK_BOOKS.filter(
+    (b) =>
+      b.title.toLowerCase().includes(query.toLowerCase()) ||
+      b.author.toLowerCase().includes(query.toLowerCase()) ||
+      b.summary.toLowerCase().includes(query.toLowerCase()) ||
+      b.vocabularyPoints.some((v) => v.toLowerCase().includes(query.toLowerCase()))
+  );
 }
