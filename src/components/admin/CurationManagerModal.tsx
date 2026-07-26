@@ -152,14 +152,15 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
     setSavingBookId(book.id);
     const selectedTrack = searchTrack[book.id] || book.trackType || batchTrack;
 
-    const success = await saveCuratedBookToDb(book, selectedTrack);
+    const result = await saveCuratedBookToDb(book, selectedTrack);
 
     setSavingBookId(null);
-    if (success) {
+    if (result.success) {
       setSavedBookIds((prev) => [...prev, book.id]);
       if (onBookAdded) onBookAdded();
     } else {
-      alert('도서 DB 등록 중 오류가 발생했습니다.');
+      console.error('Single Book Insert Error Details:', result.errorMessage);
+      alert(`⚠️ 도서 DB 등록 실패:\n${result.errorMessage || '알 수 없는 DB 저장 에러가 발생했습니다.'}`);
     }
   };
 

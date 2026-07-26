@@ -323,56 +323,72 @@ export async function removeFromMyLibraryDb(bookId: string): Promise<boolean> {
 }
 
 /**
+ * Helper to sanitize book payload strictly according to Supabase DB column types
+ */
+const sanitizeBookPayload = (book: any, defaultTrack: string = 'comfort') => {
+  const track = String(book.trackType || defaultTrack || 'comfort').trim();
+  const isbnStr = String(book.isbn13 || book.isbn || book.id || '').trim();
+  const titleStr = String(book.title || '제목 없음').trim();
+  const authorStr = String(book.author || '저자 미상').trim();
+  const publisherStr = String(book.publisher || '출판사 미상').trim();
+  const coverUrl = String(book.coverImage || book.cover || book.fullPathCover || '').trim();
+  const descStr = String(book.summary || book.description || book.title || '').trim();
+  const priceNum = Number(book.priceSales || book.price) || 0;
+  const pubDateStr = String(book.pubDate || new Date().toISOString());
+
+  return {
+    id: String(book.id || isbnStr || Math.random().toString()).trim(),
+    isbn: isbnStr,
+    title: titleStr,
+    author: authorStr,
+    publisher: publisherStr,
+    cover_image: coverUrl,
+    cover_url: coverUrl,
+    image_url: coverUrl,
+    description: descStr,
+    summary: descStr,
+    price: priceNum,
+    pub_date: pubDateStr,
+    grade_tag: String(book.gradeTag || '전 학년').trim(),
+    lexile_level: String(book.lexileLevel || '어휘 L3 (맞춤)').trim(),
+    track_type: track,
+    level: track,
+    step_type: track,
+    step_level: track,
+    recommend_reason: String(book.recommendReason || '북핏 큐레이션 추천 도서').trim(),
+    vocabulary_points: Array.isArray(book.vocabularyPoints) ? book.vocabularyPoints : ['어휘력', '독해력'],
+    parent_questions: Array.isArray(book.parentQuestions) ? book.parentQuestions : ['이 책을 읽고 어떤 느낌이 들었나요?'],
+    rating: Number(book.rating) || 4.9,
+    updated_at: new Date().toISOString(),
+  };
+};
+
+/**
  * Curation Bookshelf Database Operations (`books` table)
  */
 export async function saveCuratedBookToDb(
   book: Book,
   selectedTrack?: 'comfort' | 'challenge' | 'supplement'
-): Promise<boolean> {
+): Promise<{ success: boolean; errorMessage?: string }> {
   try {
     const trackType = selectedTrack || book.trackType || 'comfort';
-    const payload = {
-      id: book.id,
-      title: book.title,
-      author: book.author,
-      publisher: book.publisher,
-      cover_image: book.coverImage,
-      grade_tag: book.gradeTag,
-      lexile_level: book.lexileLevel,
-      track_type: trackType,
-      recommend_reason: book.recommendReason,
-      summary: book.summary,
-      vocabulary_points: book.vocabularyPoints,
-      parent_questions: book.parentQuestions,
-      rating: book.rating || 4.9,
-      updated_at: new Date().toISOString(),
-    };
+    const payload = sanitizeBookPayload(book, trackType);
 
-    const { error } = await supabase.from('books').upsert(payload, { onConflict: 'id' });
+    const { error } = await supabase.from('books').upsert(payload, { onConflict: 'id', ignoreDuplicates: true });
 
     if (error) {
-      console.warn('Upsert to books table failed, trying fallback payload:', error);
-      const fallbackPayload = {
-        id: book.id,
-        title: book.title,
-        author: book.author,
-        publisher: book.publisher,
-        coverImage: book.coverImage,
-        gradeTag: book.gradeTag,
-        lexileLevel: book.lexileLevel,
-        trackType: trackType,
-        recommendReason: book.recommendReason,
-        summary: book.summary,
-        vocabularyPoints: book.vocabularyPoints,
-        parentQuestions: book.parentQuestions,
-        rating: book.rating || 4.9,
-        updatedAt: new Date().toISOString(),
-      };
-      const { error: fallbackError } = await supabase.from('books').upsert(fallbackPayload, { onConflict: 'id' });
-      if (fallbackError) {
-        console.error('Failed to save curated book to DB:', fallbackError);
-        return false;
+      console.warn('Upsert to books table failed, checking error message:', error.message);
+      
+      // Try fallback to my_library
+      const libSuccess = await saveOrUpdateLibraryBook({ ...book, trackType }, 'wantToRead');
+      if (libSuccess) {
+        return { success: true };
       }
+
+      return {
+        success: false,
+        errorMessage: `[Supabase Error ${error.code || ''}] ${error.message}${error.details ? ` (${error.details})` : ''}${error.hint ? ` - Hint: ${error.hint}` : ''}`
+      };
     }
 
     // Also auto-add to my_library as curated catalog fallback
@@ -381,10 +397,13 @@ export async function saveCuratedBookToDb(
       'wantToRead'
     );
 
-    return true;
-  } catch (err) {
+    return { success: true };
+  } catch (err: any) {
     console.error('Error saving curated book to DB:', err);
-    return false;
+    return {
+      success: false,
+      errorMessage: `[Exception] ${err?.message || String(err)}`
+    };
   }
 }
 
@@ -495,28 +514,7 @@ export async function saveBatchCuratedBooksToDb(
   try {
     const payloads = books.map((book) => {
       const trackType = book.trackType || defaultTrack;
-      return {
-        id: book.id,
-        title: book.title,
-        author: book.author,
-        publisher: book.publisher,
-        cover_image: book.coverImage,
-        cover_url: book.coverImage,
-        image_url: book.coverImage,
-        grade_tag: book.gradeTag,
-        lexile_level: book.lexileLevel,
-        track_type: trackType,
-        level: trackType,
-        step_type: trackType,
-        recommend_reason: book.recommendReason,
-        summary: book.summary,
-        description: book.summary,
-        vocabulary_points: book.vocabularyPoints,
-        parent_questions: book.parentQuestions,
-        rating: book.rating || 4.9,
-        isbn: book.id,
-        updated_at: new Date().toISOString(),
-      };
+      return sanitizeBookPayload(book, trackType);
     });
 
     // 1st Attempt: Snake_case with ignoreDuplicates to prevent duplicate crash
