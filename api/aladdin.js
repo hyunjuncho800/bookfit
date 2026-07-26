@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   const ttbKey =
     process.env.NEXT_PUBLIC_ALADIN_TTB_KEY ||
     process.env.VITE_ALADIN_TTB_KEY ||
-    'ttbhyunjuncho8001648001';
+    'ttbfrisjune1646001';
 
   let aladinUrl = '';
   if (query && query.trim() !== '') {

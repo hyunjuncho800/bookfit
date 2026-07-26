@@ -18,7 +18,7 @@ export default defineConfig({
           const queryType = params.get('queryType') || 'ItemNewAll';
           const maxResults = params.get('maxResults') || '30';
           const query = params.get('query') || '';
-          const ttbKey = process.env.VITE_ALADIN_TTB_KEY || process.env.NEXT_PUBLIC_ALADIN_TTB_KEY || 'ttbhyunjuncho8001648001';
+          const ttbKey = process.env.VITE_ALADIN_TTB_KEY || process.env.NEXT_PUBLIC_ALADIN_TTB_KEY || 'ttbfrisjune1646001';
 
           if (query) {
             return `/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(query)}&QueryType=Keyword&CategoryId=${categoryId}&MaxResults=${maxResults}&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;

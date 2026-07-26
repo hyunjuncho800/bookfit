@@ -235,7 +235,7 @@ export async function searchAladinBooks(query: string): Promise<Book[]> {
   const ttbKey =
     (import.meta.env &&
       (import.meta.env.VITE_ALADIN_TTB_KEY || import.meta.env.NEXT_PUBLIC_ALADIN_TTB_KEY)) ||
-    'ttbhyunjuncho8001648001';
+    'ttbfrisjune1646001';
 
   const rawUrl = `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(
     query
@@ -321,7 +321,7 @@ export async function fetchAladinCategoryBooks(
   const ttbKey =
     (import.meta.env &&
       (import.meta.env.VITE_ALADIN_TTB_KEY || import.meta.env.NEXT_PUBLIC_ALADIN_TTB_KEY)) ||
-    'ttbhyunjuncho8001648001';
+    'ttbfrisjune1646001';
 
   const rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=${queryType}&CategoryId=${categoryId}&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
 
