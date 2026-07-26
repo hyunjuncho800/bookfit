@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import type { Book } from '../../types';
 import { searchAladinBooks, fetchAladinCategoryBooks } from '../../services/aladinApi';
-import { saveCuratedBookToDb, saveBatchCuratedBooksToDb } from '../../services/supabaseService';
+import { saveCuratedBookToDb, saveBatchCuratedBooksToDb, fetchCuratedBooksFromDb } from '../../services/supabaseService';
 import { BookCoverImage } from '../common/BookCoverImage';
 
 interface CurationManagerModalProps {
@@ -36,11 +36,23 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
   const [selectedBookIds, setSelectedBookIds] = useState<string[]>([]);
   const [searchTrack, setSearchTrack] = useState<Record<string, 'comfort' | 'challenge' | 'supplement'>>({});
   const [batchTrack, setBatchTrack] = useState<'comfort' | 'challenge' | 'supplement'>('comfort');
+  const [existingDbTitles, setExistingDbTitles] = useState<string[]>([]);
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isBatchSaving, setIsBatchSaving] = useState<boolean>(false);
   const [savedBookIds, setSavedBookIds] = useState<string[]>([]);
   const [savingBookId, setSavingBookId] = useState<string | null>(null);
+
+  // Load existing DB books to check for duplicates
+  const loadExistingDbBooks = async () => {
+    try {
+      const dbBooks = await fetchCuratedBooksFromDb();
+      const titles = dbBooks.map((b) => b.title.trim().toLowerCase());
+      setExistingDbTitles(titles);
+    } catch (err) {
+      console.warn('Failed to load existing DB titles:', err);
+    }
+  };
 
   // Single Search trigger
   const handleSingleSearch = async (searchQuery?: string) => {
@@ -48,6 +60,7 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
     if (!q.trim()) return;
 
     setIsLoading(true);
+    await loadExistingDbBooks();
     try {
       const results = await searchAladinBooks(q);
       setSearchResults(results);
@@ -63,11 +76,15 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
   const handleBatchFetch = async (cat: 'low' | 'mid' | 'high' | 'bestseller') => {
     setSelectedCategory(cat);
     setIsLoading(true);
+    await loadExistingDbBooks();
     try {
       const results = await fetchAladinCategoryBooks(cat);
       setSearchResults(results);
-      // Auto-select all by default for batch tab
-      setSelectedBookIds(results.map((b) => b.id));
+      // Auto-select unregistered books only by default
+      const unregisteredIds = results
+        .filter((b) => !existingDbTitles.includes(b.title.trim().toLowerCase()))
+        .map((b) => b.id);
+      setSelectedBookIds(unregisteredIds);
     } catch (err) {
       console.error('Batch fetch failed:', err);
     } finally {
@@ -369,32 +386,45 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {searchResults.map((book) => {
+                const isAlreadyInDb = existingDbTitles.includes(book.title.trim().toLowerCase());
                 const isChecked = selectedBookIds.includes(book.id);
-                const isSaved = savedBookIds.includes(book.id);
+                const isSaved = savedBookIds.includes(book.id) || isAlreadyInDb;
                 const isSaving = savingBookId === book.id;
                 const currentTrack = searchTrack[book.id] || book.trackType || batchTrack;
 
                 return (
                   <div
                     key={book.id}
-                    onClick={() => handleToggleSelect(book.id)}
-                    className={`relative border rounded-2xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
-                      isChecked
-                        ? 'bg-forest/5 border-forest-light border-2'
-                        : 'bg-cream-light border-oak/30'
+                    onClick={() => {
+                      if (!isAlreadyInDb) handleToggleSelect(book.id);
+                    }}
+                    className={`relative border rounded-2xl p-4 shadow-sm transition-all flex flex-col justify-between space-y-3 ${
+                      isAlreadyInDb
+                        ? 'bg-cream-dark/40 border-oak/20 opacity-80 cursor-default'
+                        : isChecked
+                        ? 'bg-forest/5 border-forest-light border-2 cursor-pointer'
+                        : 'bg-cream-light border-oak/30 cursor-pointer hover:shadow-md'
                     }`}
                   >
-                    {/* Top Select Checkbox Indicator */}
+                    {/* Top Select Checkbox Indicator & Duplicate Badge */}
                     <div className="flex items-center justify-between pb-2 border-b border-cream-dark">
                       <div className="flex items-center gap-2">
-                        {isChecked ? (
-                          <CheckSquare className="w-5 h-5 text-forest shrink-0" />
+                        {isAlreadyInDb ? (
+                          <span className="text-[10px] font-bold text-forest bg-forest/15 px-2.5 py-0.5 rounded-full border border-forest/30 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-forest" />
+                            <span>이미 서가 DB에 등록됨 🔒</span>
+                          </span>
+                        ) : isChecked ? (
+                          <div className="flex items-center gap-1 text-xs font-bold text-forest">
+                            <CheckSquare className="w-5 h-5 text-forest shrink-0" />
+                            <span>선택됨</span>
+                          </div>
                         ) : (
-                          <Square className="w-5 h-5 text-charcoal-muted shrink-0" />
+                          <div className="flex items-center gap-1 text-xs font-semibold text-charcoal-muted">
+                            <Square className="w-5 h-5 text-charcoal-muted shrink-0" />
+                            <span>선택 가능</span>
+                          </div>
                         )}
-                        <span className="text-xs font-bold text-charcoal">
-                          {isChecked ? '선택됨' : '선택하려면 클릭'}
-                        </span>
                       </div>
 
                       <div className="flex items-center gap-1.5">
@@ -436,13 +466,14 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
                       <div className="w-full sm:w-1/2">
                         <select
                           value={currentTrack}
+                          disabled={isAlreadyInDb}
                           onChange={(e) =>
                             handleTrackChange(
                               book.id,
                               e.target.value as 'comfort' | 'challenge' | 'supplement'
                             )
                           }
-                          className="w-full p-2 bg-cream border border-oak/30 rounded-lg text-xs font-bold text-charcoal focus:outline-none focus:border-forest"
+                          className="w-full p-2 bg-cream border border-oak/30 rounded-lg text-xs font-bold text-charcoal focus:outline-none focus:border-forest disabled:opacity-50"
                         >
                           <option value="comfort">Step 1. 적정 도서 (70%)</option>
                           <option value="challenge">Step 2. 도전 도서 (10%)</option>
@@ -453,11 +484,13 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleAddBookToDb(book);
+                          if (!isAlreadyInDb) handleAddBookToDb(book);
                         }}
                         disabled={isSaved || isSaving}
                         className={`w-full sm:w-1/2 py-2 px-3 font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 ${
-                          isSaved
+                          isAlreadyInDb
+                            ? 'bg-cream-dark text-charcoal-muted border border-oak/20 cursor-default opacity-70'
+                            : isSaved
                             ? 'bg-forest/15 text-forest border border-forest/30 cursor-default'
                             : 'bg-forest hover:bg-forest-dark text-white'
                         }`}
@@ -466,6 +499,11 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin text-oak" />
                             <span>저장 중...</span>
+                          </>
+                        ) : isAlreadyInDb ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-forest" />
+                            <span>서가에 수록됨</span>
                           </>
                         ) : isSaved ? (
                           <>

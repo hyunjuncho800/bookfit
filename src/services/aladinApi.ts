@@ -256,7 +256,7 @@ export async function searchAladinBooks(query: string): Promise<Book[]> {
 }
 
 /**
- * Fetch 30 Books at once by Grade / Category from Aladin Open API
+ * Fetch 30 Books at once by Grade / Category from Aladin Open API (Live Payload)
  */
 export async function fetchAladinCategoryBooks(
   category: 'low' | 'mid' | 'high' | 'bestseller' = 'low'
@@ -266,62 +266,88 @@ export async function fetchAladinCategoryBooks(
       (import.meta.env.VITE_ALADIN_TTB_KEY || import.meta.env.NEXT_PUBLIC_ALADIN_TTB_KEY)) ||
     'ttbhyunjuncho8001648001';
 
-  // Category search queries
-  let searchQuery = '동화';
+  let rawUrl = '';
   let gradeLabel = '초등 1~2학년';
-  let lexileTag = '어휘 L2 (기초 탐색)';
+  let lexileTag = '어휘 L2 (기초 몰입)';
 
   if (category === 'low') {
-    searchQuery = '초등 1학년 동화';
     gradeLabel = '초등 1~2학년';
-    lexileTag = '어휘 L2 (기초 탐색)';
+    lexileTag = '어휘 L2 (기초 몰입)';
+    rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=ItemNewAll&CategoryId=1108&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
   } else if (category === 'mid') {
-    searchQuery = '초등 3학년 문학';
     gradeLabel = '초등 3~4학년';
     lexileTag = '어휘 L3 (감정 확장)';
+    rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=ItemNewAll&CategoryId=1109&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
   } else if (category === 'high') {
-    searchQuery = '초등 5학년 소설';
     gradeLabel = '초등 5~6학년';
     lexileTag = '어휘 L5 (비판 사고)';
+    rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=ItemNewAll&CategoryId=1110&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
   } else if (category === 'bestseller') {
-    searchQuery = '어린이 베스트셀러';
     gradeLabel = '초등 전학년';
-    lexileTag = '어휘 L4 (서사 성장)';
+    lexileTag = '어휘 L4 (서사 몰입)';
+    rawUrl = `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ttbKey}&QueryType=Bestseller&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
   }
 
-  const rawUrl = `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(
-    searchQuery
+  // Backup ItemSearch URL if ItemList empty
+  const fallbackSearchUrl = `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(
+    category === 'low' ? '초등 1학년 동화' : category === 'mid' ? '초등 3학년 문학' : category === 'high' ? '초등 5학년 소설' : '어린이 동화'
   )}&QueryType=Keyword&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
 
-  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`;
+  const proxies = [
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  ];
 
-  try {
-    let res = await fetch(rawUrl).catch(() => null);
-    if (!res || !res.ok) {
-      res = await fetch(proxyUrl);
+  const targetUrls = [rawUrl, fallbackSearchUrl];
+
+  for (const targetUrl of targetUrls) {
+    // Attempt 1: Direct fetch
+    try {
+      const res = await fetch(targetUrl);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.item && Array.isArray(data.item) && data.item.length > 0) {
+          return data.item.map((item: AladinItem) => {
+            const mapped = mapAladinToBookFit(item);
+            return {
+              ...mapped,
+              gradeTag: gradeLabel,
+              lexileLevel: lexileTag,
+            };
+          });
+        }
+      }
+    } catch (e) {
+      // Direct fetch failed, try proxies
     }
 
-    if (res && res.ok) {
-      const data = await res.json();
-      if (data && data.item && Array.isArray(data.item) && data.item.length > 0) {
-        return data.item.map((item: AladinItem) => {
-          const mapped = mapAladinToBookFit(item);
-          return {
-            ...mapped,
-            gradeTag: gradeLabel,
-            lexileLevel: lexileTag,
-          };
-        });
+    // Attempt 2: CORS Proxy fetch
+    for (const proxyFn of proxies) {
+      try {
+        const proxyUrl = proxyFn(targetUrl);
+        const res = await fetch(proxyUrl);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.item && Array.isArray(data.item) && data.item.length > 0) {
+            return data.item.map((item: AladinItem) => {
+              const mapped = mapAladinToBookFit(item);
+              return {
+                ...mapped,
+                gradeTag: gradeLabel,
+                lexileLevel: lexileTag,
+              };
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Proxy fetch attempt failed:', err);
       }
     }
-  } catch (err) {
-    console.warn('Category fetch failed, fallback to expanded mock books:', err);
   }
 
-  // Fallback: return multiplied mock dataset items marked with selected grade
-  return ALADIN_CHILDREN_MOCK_BOOKS.map((b, idx) => ({
+  // Final fallback to mock dataset
+  return ALADIN_CHILDREN_MOCK_BOOKS.map((b) => ({
     ...b,
-    id: `cat_${category}_${idx}_${b.id}`,
     gradeTag: gradeLabel,
     lexileLevel: lexileTag,
   }));
