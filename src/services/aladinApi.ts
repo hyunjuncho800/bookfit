@@ -288,17 +288,17 @@ export async function fetchAladinCategoryBooksWithDebug(
   let lexileTag = '어휘 L2 (기초 몰입)';
 
   if (category === 'low') {
-    searchQuery = '초등 1학년 2학년 동화';
+    searchQuery = '초등 1학년 2학년 필독서';
     queryType = 'ItemNewAll';
     gradeLabel = '초등 1~2학년';
     lexileTag = '어휘 L2 (기초 몰입)';
   } else if (category === 'mid') {
-    searchQuery = '초등 3학년 4학년 문학';
+    searchQuery = '초등 3학년 4학년 추천도서';
     queryType = 'ItemNewAll';
     gradeLabel = '초등 3~4학년';
     lexileTag = '어휘 L3 (감정 확장)';
   } else if (category === 'high') {
-    searchQuery = '초등 5학년 6학년 소설';
+    searchQuery = '초등 5학년 6학년 필독서';
     queryType = 'ItemNewAll';
     gradeLabel = '초등 5~6학년';
     lexileTag = '어휘 L5 (비판 사고)';
@@ -309,29 +309,49 @@ export async function fetchAladinCategoryBooksWithDebug(
     lexileTag = '어휘 L4 (서사 몰입)';
   }
 
-  // 1st Priority: Internal Serverless API Route /api/aladdin
-  const serverApiUrl = searchQuery
-    ? `/api/aladdin?categoryId=${categoryId}&query=${encodeURIComponent(searchQuery)}&maxResults=30`
-    : `/api/aladdin?categoryId=${categoryId}&queryType=${queryType}&maxResults=30`;
+  // Helper to fetch and merge page 1 and page 2 to guarantee 30 books
+  const fetchPage = async (startPage: number = 1): Promise<AladinItem[]> => {
+    const url = searchQuery
+      ? `/api/aladdin?categoryId=${categoryId}&query=${encodeURIComponent(searchQuery)}&maxResults=30&start=${startPage}`
+      : `/api/aladdin?categoryId=${categoryId}&queryType=${queryType}&maxResults=30&start=${startPage}`;
+
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data && data.item && Array.isArray(data.item)) {
+          return data.item;
+        }
+      }
+    } catch (e) {
+      console.warn(`Page ${startPage} fetch failed via /api/aladdin:`, e);
+    }
+    return [];
+  };
 
   try {
-    const res = await fetch(serverApiUrl);
-    const data = await res.json().catch(() => null);
+    let items = await fetchPage(1);
 
-    if (data) {
-      if (data.isAladinError || (data.errorCode !== undefined && data.errorCode !== 0) || data.errorMessage) {
-        console.warn('[Serverless API Debug Response]', data);
-      } else if (data.item && Array.isArray(data.item) && data.item.length > 0) {
-        const books = data.item.map((item: AladinItem) => {
-          const mapped = mapAladinToBookFit(item);
-          return {
-            ...mapped,
-            gradeTag: gradeLabel,
-            lexileLevel: lexileTag,
-          };
-        });
-        return { books };
-      }
+    // Secondary fetch if items < 30
+    if (items.length > 0 && items.length < 30) {
+      const page2Items = await fetchPage(2);
+      page2Items.forEach((p2) => {
+        if (!items.some((it) => it.itemId === p2.itemId || it.title === p2.title)) {
+          items.push(p2);
+        }
+      });
+    }
+
+    if (items.length > 0) {
+      const books = items.slice(0, 30).map((item: AladinItem) => {
+        const mapped = mapAladinToBookFit(item);
+        return {
+          ...mapped,
+          gradeTag: gradeLabel,
+          lexileLevel: lexileTag,
+        };
+      });
+      return { books };
     }
   } catch (err: any) {
     console.warn('Fetch via /api/aladdin failed, switching to Stage 2 CORS proxy:', err);
