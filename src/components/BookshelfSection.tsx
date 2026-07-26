@@ -19,6 +19,7 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
 
   const loadBookshelfData = () => {
     fetchCuratedBooksFromDb().then((fetched) => {
+      console.log('[Fetched DB Books Result]:', fetched);
       if (fetched && fetched.length > 0) {
         setDbBooks(fetched);
       }
@@ -29,17 +30,51 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
     loadBookshelfData();
   }, []);
 
-  // Merge MOCK_BOOKS and dbBooks without duplication
+  // Merge MOCK_BOOKS and dbBooks prioritizing DB books
   const allAvailableBooks = [...dbBooks];
   MOCK_BOOKS.forEach((mockItem) => {
-    if (!allAvailableBooks.some((b) => b.id === mockItem.id || b.title === mockItem.title)) {
+    if (!allAvailableBooks.some((b) => b.id === mockItem.id || b.title.trim().toLowerCase() === mockItem.title.trim().toLowerCase())) {
       allAvailableBooks.push(mockItem);
     }
   });
 
+  const checkGradeMatch = (bookGrade: string, filter: string) => {
+    if (filter === 'all') return true;
+    if (!bookGrade) return true;
+    const lower = bookGrade.toLowerCase();
+
+    if (filter === '1-2') {
+      return (
+        lower.includes('1-2') ||
+        lower.includes('1~2') ||
+        lower.includes('1학년') ||
+        lower.includes('2학년') ||
+        lower.includes('저학년')
+      );
+    }
+    if (filter === '3-4') {
+      return (
+        lower.includes('3-4') ||
+        lower.includes('3~4') ||
+        lower.includes('3학년') ||
+        lower.includes('4학년') ||
+        lower.includes('중학년')
+      );
+    }
+    if (filter === '5-6') {
+      return (
+        lower.includes('5-6') ||
+        lower.includes('5~6') ||
+        lower.includes('5학년') ||
+        lower.includes('6학년') ||
+        lower.includes('고학년')
+      );
+    }
+    return lower.includes(filter.toLowerCase());
+  };
+
   const filteredBooks = allAvailableBooks.filter((book) => {
-    const matchGrade =
-      activeGradeFilter === 'all' || book.gradeTag.includes(activeGradeFilter);
+    const matchGrade = checkGradeMatch(book.gradeTag, activeGradeFilter);
     const matchTrack =
       activeTrackFilter === 'all' || book.trackType === activeTrackFilter;
     return matchGrade && matchTrack;

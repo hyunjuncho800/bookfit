@@ -417,6 +417,8 @@ export async function fetchCuratedBooksFromDb(): Promise<Book[]> {
       .select('*')
       .order('created_at', { ascending: false });
 
+    console.log('[Supabase SELECT public.books Data]:', booksData);
+
     if (booksData && Array.isArray(booksData)) {
       booksData.forEach((item: any) => {
         const track = (item.track_type || item.trackType || item.level || item.step_type || 'comfort') as
