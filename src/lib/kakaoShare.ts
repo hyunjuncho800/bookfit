@@ -4,8 +4,11 @@ declare global {
   }
 }
 
-// Kakao JavaScript App Key (Standard public client key placeholder)
-const KAKAO_JAVASCRIPT_KEY = '8a41c2c31e9c2c77d0799d1469e3df8d';
+// Kakao JavaScript App Key
+const KAKAO_JAVASCRIPT_KEY =
+  (import.meta as any).env?.VITE_KAKAO_JS_KEY ||
+  (import.meta as any).env?.NEXT_PUBLIC_KAKAO_JS_KEY ||
+  '44413e33f1ff605280385b423a54f254';
 
 /**
  * Initialize Kakao SDK dynamically if not already loaded

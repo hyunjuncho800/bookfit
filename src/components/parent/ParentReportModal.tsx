@@ -1,17 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Award,
   TrendingUp,
   BookOpen,
   Sparkles,
   Share2,
   X,
-  CheckCircle2,
-  Heart,
   MessageCircle,
-  HelpCircle,
   ShieldCheck,
-  Zap,
   BarChart3,
   Lightbulb,
   Printer,
@@ -36,13 +31,11 @@ export const ParentReportModal: React.FC<ParentReportModalProps> = ({
 }) => {
   const [diagnosticData, setDiagnosticData] = useState<DiagnosticResultData | null>(null);
   const [myBooks, setMyBooks] = useState<MyBookItem[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     if (!isOpen) return;
 
     let isMounted = true;
-    setIsLoading(true);
 
     Promise.all([
       getLatestDiagnosticResultFromDb(),
@@ -51,7 +44,6 @@ export const ParentReportModal: React.FC<ParentReportModalProps> = ({
       if (isMounted) {
         setDiagnosticData(diagResult);
         setMyBooks(libraryBooks);
-        setIsLoading(false);
       }
     });
 
