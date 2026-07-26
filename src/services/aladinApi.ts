@@ -254,3 +254,75 @@ export async function searchAladinBooks(query: string): Promise<Book[]> {
       b.vocabularyPoints.some((v) => v.toLowerCase().includes(query.toLowerCase()))
   );
 }
+
+/**
+ * Fetch 30 Books at once by Grade / Category from Aladin Open API
+ */
+export async function fetchAladinCategoryBooks(
+  category: 'low' | 'mid' | 'high' | 'bestseller' = 'low'
+): Promise<Book[]> {
+  const ttbKey =
+    (import.meta.env &&
+      (import.meta.env.VITE_ALADIN_TTB_KEY || import.meta.env.NEXT_PUBLIC_ALADIN_TTB_KEY)) ||
+    'ttbhyunjuncho8001648001';
+
+  // Category search queries
+  let searchQuery = '동화';
+  let gradeLabel = '초등 1~2학년';
+  let lexileTag = '어휘 L2 (기초 탐색)';
+
+  if (category === 'low') {
+    searchQuery = '초등 1학년 동화';
+    gradeLabel = '초등 1~2학년';
+    lexileTag = '어휘 L2 (기초 탐색)';
+  } else if (category === 'mid') {
+    searchQuery = '초등 3학년 문학';
+    gradeLabel = '초등 3~4학년';
+    lexileTag = '어휘 L3 (감정 확장)';
+  } else if (category === 'high') {
+    searchQuery = '초등 5학년 소설';
+    gradeLabel = '초등 5~6학년';
+    lexileTag = '어휘 L5 (비판 사고)';
+  } else if (category === 'bestseller') {
+    searchQuery = '어린이 베스트셀러';
+    gradeLabel = '초등 전학년';
+    lexileTag = '어휘 L4 (서사 성장)';
+  }
+
+  const rawUrl = `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ttbKey}&Query=${encodeURIComponent(
+    searchQuery
+  )}&QueryType=Keyword&MaxResults=30&start=1&SearchTarget=Book&SubSearchTarget=Children&output=js&Version=20131101`;
+
+  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`;
+
+  try {
+    let res = await fetch(rawUrl).catch(() => null);
+    if (!res || !res.ok) {
+      res = await fetch(proxyUrl);
+    }
+
+    if (res && res.ok) {
+      const data = await res.json();
+      if (data && data.item && Array.isArray(data.item) && data.item.length > 0) {
+        return data.item.map((item: AladinItem) => {
+          const mapped = mapAladinToBookFit(item);
+          return {
+            ...mapped,
+            gradeTag: gradeLabel,
+            lexileLevel: lexileTag,
+          };
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('Category fetch failed, fallback to expanded mock books:', err);
+  }
+
+  // Fallback: return multiplied mock dataset items marked with selected grade
+  return ALADIN_CHILDREN_MOCK_BOOKS.map((b, idx) => ({
+    ...b,
+    id: `cat_${category}_${idx}_${b.id}`,
+    gradeTag: gradeLabel,
+    lexileLevel: lexileTag,
+  }));
+}

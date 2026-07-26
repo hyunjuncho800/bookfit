@@ -416,3 +416,78 @@ export async function fetchCuratedBooksFromDb(): Promise<Book[]> {
     return [];
   }
 }
+
+/**
+ * Batch Insert Curated Books into Supabase `books` DB
+ */
+export async function saveBatchCuratedBooksToDb(
+  books: Book[],
+  defaultTrack: 'comfort' | 'challenge' | 'supplement' = 'comfort'
+): Promise<{ success: boolean; count: number }> {
+  if (!books || books.length === 0) {
+    return { success: true, count: 0 };
+  }
+
+  try {
+    const payloads = books.map((book) => {
+      const trackType = book.trackType || defaultTrack;
+      return {
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        publisher: book.publisher,
+        cover_image: book.coverImage,
+        grade_tag: book.gradeTag,
+        lexile_level: book.lexileLevel,
+        track_type: trackType,
+        recommend_reason: book.recommendReason,
+        summary: book.summary,
+        vocabulary_points: book.vocabularyPoints,
+        parent_questions: book.parentQuestions,
+        rating: book.rating || 4.9,
+        updated_at: new Date().toISOString(),
+      };
+    });
+
+    const { error } = await supabase.from('books').upsert(payloads, { onConflict: 'id' });
+
+    if (error) {
+      console.warn('Batch upsert snake_case failed, trying fallback:', error);
+      const fallbackPayloads = books.map((book) => ({
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        publisher: book.publisher,
+        coverImage: book.coverImage,
+        gradeTag: book.gradeTag,
+        lexileLevel: book.lexileLevel,
+        trackType: book.trackType || defaultTrack,
+        recommendReason: book.recommendReason,
+        summary: book.summary,
+        vocabularyPoints: book.vocabularyPoints,
+        parentQuestions: book.parentQuestions,
+        rating: book.rating || 4.9,
+        updatedAt: new Date().toISOString(),
+      }));
+
+      const { error: fallbackError } = await supabase.from('books').upsert(fallbackPayloads, { onConflict: 'id' });
+      if (fallbackError) {
+        console.error('Batch insert failed:', fallbackError);
+        return { success: false, count: 0 };
+      }
+    }
+
+    // Auto seed my_library for catalog lookup
+    for (const book of books) {
+      await saveOrUpdateLibraryBook(
+        { ...book, trackType: book.trackType || defaultTrack },
+        'wantToRead'
+      );
+    }
+
+    return { success: true, count: books.length };
+  } catch (err) {
+    console.error('Error batch inserting books to DB:', err);
+    return { success: false, count: 0 };
+  }
+}
