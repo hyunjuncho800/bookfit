@@ -14,7 +14,6 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string>('전체');
   const [selectedLexileLevel, setSelectedLexileLevel] = useState<string>('all');
-  const [rawDbBooks, setRawDbBooks] = useState<Book[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [savedBookIds, setSavedBookIds] = useState<Set<string>>(new Set());
@@ -40,63 +39,49 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
     { id: 'L6', label: 'L6 (심화)' },
   ];
 
-  // 1. Initial Data Fetching on Mount (useEffect with [])
+  // Unified Data Fetch & Filter Lifecycle Handler
   useEffect(() => {
-    const fetchInitialDbBooks = async () => {
-      setIsLoading(true);
-      const data = await fetchCuratedBooksFromDb();
-      console.log('불러온 전체 DB 도서 개수:', data.length);
-      setRawDbBooks(data);
-      setBooks(data);
-      setIsLoading(false);
-    };
-
-    fetchInitialDbBooks();
-  }, []);
-
-  // 2. Keyword Search Trigger (Only when searchQuery is active)
-  useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setBooks(rawDbBooks);
-      return;
-    }
-
     const timer = setTimeout(async () => {
       setIsLoading(true);
-      const results = await searchAladinBooks(searchQuery);
-      setBooks(results);
+      let candidateBooks: Book[] = [];
+
+      // 1. Fetch DB books if empty query, or perform keyword search
+      if (!searchQuery || searchQuery.trim() === '') {
+        candidateBooks = await fetchCuratedBooksFromDb();
+      } else {
+        candidateBooks = await searchAladinBooks(searchQuery);
+      }
+
+      // 2. Apply Tag & Lexile Filter (Filter Bypass on '전체' / 'all')
+      const finalBooks = candidateBooks.filter((book) => {
+        const matchTag =
+          !selectedTag ||
+          selectedTag === '전체' ||
+          selectedTag === '#전체' ||
+          selectedTag === 'all' ||
+          book.gradeTag.includes(selectedTag) ||
+          book.recommendReason.includes(selectedTag) ||
+          book.lexileLevel.includes(selectedTag) ||
+          book.summary.includes(selectedTag);
+
+        const matchLexile =
+          !selectedLexileLevel ||
+          selectedLexileLevel === 'all' ||
+          selectedLexileLevel === '전체 레벨' ||
+          selectedLexileLevel === '전체' ||
+          book.lexileLevel.includes(selectedLexileLevel);
+
+        return matchTag && matchLexile;
+      });
+
+      console.log('[Desk Search] 최종 렌더링 도서 개수:', finalBooks.length, finalBooks);
+      console.log('현재 표시할 filteredBooks:', finalBooks.length, finalBooks);
+      setBooks(finalBooks);
       setIsLoading(false);
-    }, 250);
+    }, 200);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, rawDbBooks]);
-
-  // 3. Filter books by Tag & Lexile level (Filter Bypass applied)
-  const filteredBooks = books.filter((book) => {
-    const matchTag =
-      !selectedTag ||
-      selectedTag === '전체' ||
-      selectedTag === '#전체' ||
-      selectedTag === 'all' ||
-      book.gradeTag.includes(selectedTag) ||
-      book.recommendReason.includes(selectedTag) ||
-      book.lexileLevel.includes(selectedTag) ||
-      book.summary.includes(selectedTag);
-
-    const matchLexile =
-      !selectedLexileLevel ||
-      selectedLexileLevel === 'all' ||
-      selectedLexileLevel === '전체 레벨' ||
-      selectedLexileLevel === '전체' ||
-      book.lexileLevel.includes(selectedLexileLevel);
-
-    return matchTag && matchLexile;
-  });
-
-  // Log filtered books count
-  useEffect(() => {
-    console.log('현재 표시할 filteredBooks:', filteredBooks.length, filteredBooks);
-  }, [filteredBooks]);
+  }, [searchQuery, selectedTag, selectedLexileLevel]);
 
   const toggleSaveBook = (bookId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -213,7 +198,7 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
               큐레이션 도서 서가 목록
             </span>
             <span className="text-xs font-bold text-forest bg-forest/10 px-2.5 py-0.5 rounded-full">
-              총 {filteredBooks.length}권 검색됨
+              총 {books.length}권 검색됨
             </span>
           </div>
 
@@ -236,7 +221,7 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
         {/* Curated Book Card Grid (3-4 Columns Responsive) */}
         {!isLoading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {filteredBooks.map((book) => {
+            {books.map((book) => {
               const isSaved = savedBookIds.has(book.id);
               return (
                 <div
@@ -324,7 +309,7 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
         )}
 
         {/* Empty State */}
-        {!isLoading && filteredBooks.length === 0 && (
+        {!isLoading && books.length === 0 && (
           <div className="py-16 text-center bg-cream-light rounded-3xl border border-oak/30 p-8 space-y-3">
             <BookOpen className="w-10 h-10 text-oak mx-auto" />
             <h4 className="text-lg font-bold font-serif text-charcoal">
