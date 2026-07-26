@@ -13,7 +13,7 @@ import {
   Layers
 } from 'lucide-react';
 import type { Book } from '../../types';
-import { searchAladinBooks, fetchAladinCategoryBooks } from '../../services/aladinApi';
+import { searchAladinBooks, fetchAladinCategoryBooksWithDebug } from '../../services/aladinApi';
 import { saveCuratedBookToDb, saveBatchCuratedBooksToDb, fetchCuratedBooksFromDb } from '../../services/supabaseService';
 import { BookCoverImage } from '../common/BookCoverImage';
 
@@ -37,6 +37,7 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
   const [searchTrack, setSearchTrack] = useState<Record<string, 'comfort' | 'challenge' | 'supplement'>>({});
   const [batchTrack, setBatchTrack] = useState<'comfort' | 'challenge' | 'supplement'>('comfort');
   const [existingDbTitles, setExistingDbTitles] = useState<string[]>([]);
+  const [apiErrorInfo, setApiErrorInfo] = useState<any>(null);
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isBatchSaving, setIsBatchSaving] = useState<boolean>(false);
@@ -60,6 +61,7 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
     if (!q.trim()) return;
 
     setIsLoading(true);
+    setApiErrorInfo(null);
     await loadExistingDbBooks();
     try {
       const results = await searchAladinBooks(q);
@@ -76,12 +78,16 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
   const handleBatchFetch = async (cat: 'low' | 'mid' | 'high' | 'bestseller') => {
     setSelectedCategory(cat);
     setIsLoading(true);
+    setApiErrorInfo(null);
     await loadExistingDbBooks();
     try {
-      const results = await fetchAladinCategoryBooks(cat);
-      setSearchResults(results);
+      const result = await fetchAladinCategoryBooksWithDebug(cat);
+      setSearchResults(result.books);
+      if (result.errorInfo) {
+        setApiErrorInfo(result.errorInfo);
+      }
       // Auto-select unregistered books only by default
-      const unregisteredIds = results
+      const unregisteredIds = result.books
         .filter((b) => !existingDbTitles.includes(b.title.trim().toLowerCase()))
         .map((b) => b.id);
       setSelectedBookIds(unregisteredIds);
@@ -383,13 +389,46 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
                 알라딘 Open API에서 {selectedCategory === 'low' ? '초등 저학년' : selectedCategory === 'mid' ? '초등 중학년' : selectedCategory === 'high' ? '초등 고학년' : '베스트셀러'} 30권을 조회하고 있습니다...
               </p>
             </div>
-          ) : searchResults.length === 0 ? (
-            <div className="py-16 text-center space-y-3 bg-cream-card/40 rounded-2xl border border-red-200">
-              <p className="text-sm text-red-600 font-bold font-serif">
-                도서를 불러오는 중 오류가 발생했거나 해당 카테고리 도서가 없습니다.
-              </p>
-              <p className="text-xs text-charcoal-muted">
-                네트워크 연결 상태나 알라딘 API 키 설정을 확인 후 다시 시도해 주세요.
+          ) : searchResults.length === 0 || apiErrorInfo ? (
+            <div className="p-6 bg-red-50/90 border-2 border-red-500/80 rounded-2xl space-y-4 shadow-sm text-left animate-fadeIn">
+              <div className="flex items-center gap-2 text-red-700 font-bold font-serif text-sm border-b border-red-200 pb-3">
+                <span className="w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center text-xs font-sans">
+                  !
+                </span>
+                <span>[Aladin Error Response] 알라딘 API 호출 오류 디버그 리포트</span>
+              </div>
+
+              <div className="space-y-2 text-xs font-mono text-red-800 leading-relaxed bg-white/80 p-4 rounded-xl border border-red-200">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-red-900 bg-red-100 px-2 py-0.5 rounded border border-red-300">
+                    {apiErrorInfo?.errorCode !== undefined ? `[ErrorCode ${apiErrorInfo.errorCode}]` : '[Error] TTBKey / Proxy Issue'}
+                  </span>
+                  {apiErrorInfo?.errorCodeName && (
+                    <span className="font-semibold text-red-700">
+                      ({apiErrorInfo.errorCodeName})
+                    </span>
+                  )}
+                </div>
+
+                <p className="font-bold text-red-900 text-sm pt-1">
+                  🚨 {apiErrorInfo?.errorMessage || '알라딘 API 응답 실패 또는 데이터 없음'}
+                </p>
+
+                <div className="pt-2 text-[11px] text-red-700 space-y-1 border-t border-red-100">
+                  <p>
+                    • <strong>TTBKey Status:</strong>{' '}
+                    <span className="text-forest font-bold">
+                      {apiErrorInfo?.ttbKeyPresent !== false ? `Loaded (${apiErrorInfo?.ttbKeyPrefix || 'ttbfris...'})` : 'Missing (undefined)'}
+                    </span>
+                  </p>
+                  <p className="break-all font-sans text-[10px] text-gray-600">
+                    • <strong>Failed Endpoint:</strong> {apiErrorInfo?.url || 'https://www.aladin.co.kr/ttb/api/ItemList.aspx'}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-red-600 font-medium">
+                Tip: 브라우저 개발자 도구 (Network / Console) 탭에서 호출 상세 응답을 추가로 확인하실 수 있습니다.
               </p>
             </div>
           ) : (

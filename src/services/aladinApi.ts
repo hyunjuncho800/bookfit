@@ -262,12 +262,25 @@ export async function searchAladinBooks(query: string): Promise<Book[]> {
   return [];
 }
 
+export interface AladinFetchResult {
+  books: Book[];
+  errorInfo?: {
+    isAladinError?: boolean;
+    errorCode?: number;
+    errorMessage?: string;
+    errorCodeName?: string;
+    ttbKeyPresent?: boolean;
+    ttbKeyPrefix?: string;
+    url?: string;
+  };
+}
+
 /**
- * Fetch 30 Books at once by Grade / Category from Aladin Open API via Server API Route /api/aladdin
+ * Fetch 30 Books with Debug Info by Grade / Category from Aladin Open API
  */
-export async function fetchAladinCategoryBooks(
+export async function fetchAladinCategoryBooksWithDebug(
   category: 'low' | 'mid' | 'high' | 'bestseller' = 'low'
-): Promise<Book[]> {
+): Promise<AladinFetchResult> {
   let categoryId = '51100';
   let queryType = 'ItemNewAll';
   let gradeLabel = '초등 1~2학년';
@@ -295,15 +308,31 @@ export async function fetchAladinCategoryBooks(
     lexileTag = '어휘 L4 (서사 몰입)';
   }
 
-  // Primary Endpoint: Internal Serverless / Proxy Route /api/aladdin
   const serverApiUrl = `/api/aladdin?categoryId=${categoryId}&queryType=${queryType}&maxResults=30`;
 
   try {
     const res = await fetch(serverApiUrl);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.item && Array.isArray(data.item) && data.item.length > 0) {
-        return data.item.map((item: AladinItem) => {
+    const data = await res.json().catch(() => null);
+
+    if (data) {
+      if (data.isAladinError || data.errorCode !== undefined || data.errorMessage) {
+        console.error('[Aladin API Debug Response]', data);
+        return {
+          books: [],
+          errorInfo: {
+            isAladinError: true,
+            errorCode: data.errorCode,
+            errorMessage: data.errorMessage || data.error || '알라딘 API 응답 에러 발생',
+            errorCodeName: data.errorCodeName,
+            ttbKeyPresent: data.ttbKeyPresent,
+            ttbKeyPrefix: data.ttbKeyPrefix,
+            url: data.url || serverApiUrl
+          }
+        };
+      }
+
+      if (data.item && Array.isArray(data.item) && data.item.length > 0) {
+        const books = data.item.map((item: AladinItem) => {
           const mapped = mapAladinToBookFit(item);
           return {
             ...mapped,
@@ -311,13 +340,14 @@ export async function fetchAladinCategoryBooks(
             lexileLevel: lexileTag,
           };
         });
+        return { books };
       }
     }
-  } catch (err) {
-    console.error('Fetch via /api/aladdin failed, attempting proxy fallbacks:', err);
+  } catch (err: any) {
+    console.error('Fetch via /api/aladdin failed:', err);
   }
 
-  // Backup Endpoints via CORS proxies
+  // Backup CORS proxies
   const ttbKey =
     (import.meta.env &&
       (import.meta.env.VITE_ALADIN_TTB_KEY || import.meta.env.NEXT_PUBLIC_ALADIN_TTB_KEY)) ||
@@ -337,7 +367,7 @@ export async function fetchAladinCategoryBooks(
       if (res.ok) {
         const data = await res.json();
         if (data && data.item && Array.isArray(data.item) && data.item.length > 0) {
-          return data.item.map((item: AladinItem) => {
+          const books = data.item.map((item: AladinItem) => {
             const mapped = mapAladinToBookFit(item);
             return {
               ...mapped,
@@ -345,6 +375,7 @@ export async function fetchAladinCategoryBooks(
               lexileLevel: lexileTag,
             };
           });
+          return { books };
         }
       }
     } catch (err) {
@@ -352,6 +383,21 @@ export async function fetchAladinCategoryBooks(
     }
   }
 
-  console.error('All Aladin API fetch endpoints failed. Returning empty list.');
-  return [];
+  return {
+    books: [],
+    errorInfo: {
+      isAladinError: true,
+      errorMessage: '알라딘 API 모든 서버 및 프록시 엔드포인트 호출에 실패했습니다.',
+      ttbKeyPresent: Boolean(ttbKey),
+      ttbKeyPrefix: ttbKey ? ttbKey.substring(0, 7) + '...' : 'Missing',
+      url: rawUrl
+    }
+  };
+}
+
+export async function fetchAladinCategoryBooks(
+  category: 'low' | 'mid' | 'high' | 'bestseller' = 'low'
+): Promise<Book[]> {
+  const result = await fetchAladinCategoryBooksWithDebug(category);
+  return result.books;
 }
