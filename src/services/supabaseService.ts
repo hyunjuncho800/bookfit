@@ -423,7 +423,7 @@ export async function fetchCuratedBooksFromDb(): Promise<Book[]> {
 export async function saveBatchCuratedBooksToDb(
   books: Book[],
   defaultTrack: 'comfort' | 'challenge' | 'supplement' = 'comfort'
-): Promise<{ success: boolean; count: number }> {
+): Promise<{ success: boolean; count: number; errorMessage?: string }> {
   if (!books || books.length === 0) {
     return { success: true, count: 0 };
   }
@@ -437,22 +437,32 @@ export async function saveBatchCuratedBooksToDb(
         author: book.author,
         publisher: book.publisher,
         cover_image: book.coverImage,
+        cover_url: book.coverImage,
+        image_url: book.coverImage,
         grade_tag: book.gradeTag,
         lexile_level: book.lexileLevel,
         track_type: trackType,
+        level: trackType,
+        step_type: trackType,
         recommend_reason: book.recommendReason,
         summary: book.summary,
+        description: book.summary,
         vocabulary_points: book.vocabularyPoints,
         parent_questions: book.parentQuestions,
         rating: book.rating || 4.9,
+        isbn: book.id,
         updated_at: new Date().toISOString(),
       };
     });
 
-    const { error } = await supabase.from('books').upsert(payloads, { onConflict: 'id' });
+    // 1st Attempt: Snake_case with ignoreDuplicates to prevent duplicate crash
+    const { error } = await supabase
+      .from('books')
+      .upsert(payloads, { onConflict: 'id', ignoreDuplicates: true });
 
     if (error) {
-      console.warn('Batch upsert snake_case failed, trying fallback:', error);
+      console.warn('Batch upsert snake_case failed, trying fallback camelCase schema:', error.message);
+      
       const fallbackPayloads = books.map((book) => ({
         id: book.id,
         title: book.title,
@@ -467,13 +477,21 @@ export async function saveBatchCuratedBooksToDb(
         vocabularyPoints: book.vocabularyPoints,
         parentQuestions: book.parentQuestions,
         rating: book.rating || 4.9,
+        isbn: book.id,
         updatedAt: new Date().toISOString(),
       }));
 
-      const { error: fallbackError } = await supabase.from('books').upsert(fallbackPayloads, { onConflict: 'id' });
+      const { error: fallbackError } = await supabase
+        .from('books')
+        .upsert(fallbackPayloads, { onConflict: 'id', ignoreDuplicates: true });
+
       if (fallbackError) {
-        console.error('Batch insert failed:', fallbackError);
-        return { success: false, count: 0 };
+        console.error('Supabase Batch Insert Error:', fallbackError);
+        return {
+          success: false,
+          count: 0,
+          errorMessage: `[Supabase Error] ${fallbackError.message} (Details: ${fallbackError.details || fallbackError.hint || 'Schema Mismatch'})`
+        };
       }
     }
 
@@ -486,8 +504,12 @@ export async function saveBatchCuratedBooksToDb(
     }
 
     return { success: true, count: books.length };
-  } catch (err) {
-    console.error('Error batch inserting books to DB:', err);
-    return { success: false, count: 0 };
+  } catch (err: any) {
+    console.error('Exception during batch inserting books to DB:', err);
+    return {
+      success: false,
+      count: 0,
+      errorMessage: `[Exception] ${err?.message || String(err)}`
+    };
   }
 }

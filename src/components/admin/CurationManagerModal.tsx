@@ -183,10 +183,11 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
 
     if (result.success) {
       setSavedBookIds((prev) => [...prev, ...selectedBookIds]);
-      alert(`🎉 총 ${result.count}권의 도서가 큐레이션 서가 DB에 일괄 저장되었습니다!`);
+      alert(`🎉 총 ${result.count}권의 도서가 큐레이션 서가 DB에 성공적으로 일괄 저장되었습니다!`);
       if (onBookAdded) onBookAdded();
     } else {
-      alert('일괄 DB 저장 중 오류가 발생했습니다.');
+      console.error('Batch Insert Error Details:', result.errorMessage);
+      alert(`⚠️ 일괄 DB 저장 실패:\n${result.errorMessage || '알 수 없는 DB 저장 에러가 발생했습니다.'}`);
     }
   };
 

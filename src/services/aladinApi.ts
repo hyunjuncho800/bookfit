@@ -281,32 +281,38 @@ export interface AladinFetchResult {
 export async function fetchAladinCategoryBooksWithDebug(
   category: 'low' | 'mid' | 'high' | 'bestseller' = 'low'
 ): Promise<AladinFetchResult> {
-  // Enforce official Aladin Children Category ID 1108
   const categoryId = '1108';
   let queryType = 'Bestseller';
+  let searchQuery = '';
   let gradeLabel = '초등 1~2학년';
   let lexileTag = '어휘 L2 (기초 몰입)';
 
   if (category === 'low') {
+    searchQuery = '초등 1학년 2학년 동화';
     queryType = 'ItemNewAll';
     gradeLabel = '초등 1~2학년';
     lexileTag = '어휘 L2 (기초 몰입)';
   } else if (category === 'mid') {
+    searchQuery = '초등 3학년 4학년 문학';
     queryType = 'ItemNewAll';
     gradeLabel = '초등 3~4학년';
     lexileTag = '어휘 L3 (감정 확장)';
   } else if (category === 'high') {
+    searchQuery = '초등 5학년 6학년 소설';
     queryType = 'ItemNewAll';
     gradeLabel = '초등 5~6학년';
     lexileTag = '어휘 L5 (비판 사고)';
   } else if (category === 'bestseller') {
+    searchQuery = '';
     queryType = 'Bestseller';
     gradeLabel = '초등 전학년';
     lexileTag = '어휘 L4 (서사 몰입)';
   }
 
   // 1st Priority: Internal Serverless API Route /api/aladdin
-  const serverApiUrl = `/api/aladdin?categoryId=${categoryId}&queryType=${queryType}&maxResults=30`;
+  const serverApiUrl = searchQuery
+    ? `/api/aladdin?categoryId=${categoryId}&query=${encodeURIComponent(searchQuery)}&maxResults=30`
+    : `/api/aladdin?categoryId=${categoryId}&queryType=${queryType}&maxResults=30`;
 
   try {
     const res = await fetch(serverApiUrl);
