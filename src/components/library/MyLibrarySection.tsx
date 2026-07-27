@@ -9,6 +9,7 @@ import {
   saveOrUpdateLibraryBook,
   updateLibraryBookStatus,
   updateLibraryBookReviewAndRating,
+  supabase,
 } from '../../services/supabaseService';
 
 interface MyLibrarySectionProps {
@@ -61,14 +62,14 @@ const INITIAL_MY_BOOKS: MyBookItem[] = [
     status: 'completed',
     progressPercent: 100,
     userRating: 5,
-    newWordsLearned: ['공리주의', '딜레마'],
+    newWordsLearned: ['용기', '자존감'],
     oneLineReview: '어렵지만 부모님과 이야기 나누니까 생각이 넓어졌어요!',
     completedAt: '2026-07-15'
   }
 ];
 
 const INITIAL_PROFILE: UserGamificationProfile = {
-  childName: '이지호',
+  childName: '우리 아이',
   levelBadgeTitle: '어휘 Level 3 - 꼬마 탐정 🕵️‍♂️',
   currentExp: 470,
   nextLevelExp: 500,
@@ -90,9 +91,39 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
   const [activeTab, setActiveTab] = useState<ReadingStatus>('reading');
   const [myBooks, setMyBooks] = useState<MyBookItem[]>(INITIAL_MY_BOOKS);
   const [profile, setProfile] = useState<UserGamificationProfile>(INITIAL_PROFILE);
+  const [userInfo, setUserInfo] = useState<{ childName: string; parentName: string }>({
+    childName: '우리 아이',
+    parentName: ''
+  });
   const [editingBookItem, setEditingBookItem] = useState<MyBookItem | null>(null);
   const [showCelebration, setShowCelebration] = useState<boolean>(false);
   const [isParentReportOpen, setIsParentReportOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const user = data?.user;
+      if (user) {
+        const cName = user.user_metadata?.child_name || user.user_metadata?.childName || '우리 아이';
+        const pName = user.user_metadata?.parent_name || user.user_metadata?.parentName || '';
+        setUserInfo({ childName: cName, parentName: pName });
+        setProfile(prev => ({ ...prev, childName: cName }));
+      }
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user;
+      if (user) {
+        const cName = user.user_metadata?.child_name || user.user_metadata?.childName || '우리 아이';
+        const pName = user.user_metadata?.parent_name || user.user_metadata?.parentName || '';
+        setUserInfo({ childName: cName, parentName: pName });
+        setProfile(prev => ({ ...prev, childName: cName }));
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   const loadLibraryData = async () => {
     const dbBooks = await fetchMyLibraryFromDb();
@@ -171,6 +202,13 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     }
   };
 
+      {/* Parent Report Modal */}
+      <ParentReportModal
+        isOpen={isParentReportOpen}
+        onClose={() => setIsParentReportOpen(false)}
+        childName={userInfo.childName}
+      />
+
   // Save Review Modal Form & Sync to Supabase
   const handleSaveReview = async (rating: number, review: string, words: string[]) => {
     if (!editingBookItem) return;
@@ -224,8 +262,8 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
             {/* Profile Left */}
             <div className="md:col-span-6 flex items-center gap-4">
               <div className="relative">
-                <div className="w-20 h-20 rounded-2xl bg-oak text-forest flex items-center justify-center text-3xl font-extrabold shadow-md border-2 border-cream-light">
-                  지호
+                <div className="w-20 h-20 rounded-2xl bg-oak text-forest flex items-center justify-center text-xl sm:text-2xl font-extrabold shadow-md border-2 border-cream-light truncate px-1">
+                  {userInfo.childName.length > 3 ? userInfo.childName.slice(0, 3) : userInfo.childName}
                 </div>
                 <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-forest-light border-2 border-white flex items-center justify-center text-xs">
                   ✨
@@ -238,10 +276,10 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                   {profile.levelBadgeTitle}
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-bold font-serif text-white">
-                  {profile.childName}의 비밀 서재
+                  {userInfo.childName}의 비밀 서재
                 </h2>
                 <p className="text-xs text-cream-card/80">
-                  북핏 정밀 맞춤 서가에서 차곡차곡 쌓여가는 독서 성장의 기록입니다.
+                  {userInfo.parentName ? `${userInfo.parentName} 님, 반갑습니다! ` : ''}북핏 정밀 맞춤 서가에서 차곡차곡 쌓여가는 독서 성장의 기록입니다.
                 </p>
               </div>
             </div>
@@ -489,6 +527,12 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
         levelBadgeTitle={profile.levelBadgeTitle}
       />
 
+      {/* Parent Report Modal */}
+      <ParentReportModal
+        isOpen={isParentReportOpen}
+        onClose={() => setIsParentReportOpen(false)}
+        childName={userInfo.childName}
+      />
     </section>
   );
 };

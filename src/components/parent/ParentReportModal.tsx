@@ -26,7 +26,7 @@ interface ParentReportModalProps {
 export const ParentReportModal: React.FC<ParentReportModalProps> = ({
   isOpen,
   onClose,
-  childName = '이지호',
+  childName = '우리 아이',
   levelBadgeTitle = '어휘 Level 3 - L3 감성 표현 클리닉 🕵️‍♂️'
 }) => {
   const [diagnosticData, setDiagnosticData] = useState<DiagnosticResultData | null>(null);
