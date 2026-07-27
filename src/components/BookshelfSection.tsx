@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { MOCK_BOOKS } from '../data/mockData';
+import { RECOMMENDED_BOOKS_BY_AGE } from '../data/seedBooksData';
 import type { Book } from '../types';
 import { Library, Star, Filter, Info, Sparkles, Database, Trash2, Shield } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
 import { CurationManagerModal } from './admin/CurationManagerModal';
 import { fetchCuratedBooksFromDb, deleteBookFromDb } from '../services/supabaseService';
+
+const ALL_SEED_BOOKS = [
+  ...RECOMMENDED_BOOKS_BY_AGE.preschool,
+  ...RECOMMENDED_BOOKS_BY_AGE.elementary_low,
+  ...RECOMMENDED_BOOKS_BY_AGE.elementary_mid,
+  ...RECOMMENDED_BOOKS_BY_AGE.elementary_high,
+];
 
 export const getCoupangSearchLink = (title: string): string => {
   if (!title) return 'https://www.coupang.com';
@@ -69,8 +77,13 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
     }
   };
 
-  // Merge MOCK_BOOKS and dbBooks prioritizing DB books
-  const allAvailableBooks = [...dbBooks];
+  // Merge Seed books, DB books and MOCK_BOOKS prioritizing 29 Educational Seed Books
+  const allAvailableBooks: Book[] = [...ALL_SEED_BOOKS];
+  dbBooks.forEach((dbItem) => {
+    if (!allAvailableBooks.some((b) => b.id === dbItem.id || b.title.trim().toLowerCase() === dbItem.title.trim().toLowerCase())) {
+      allAvailableBooks.push(dbItem);
+    }
+  });
   MOCK_BOOKS.forEach((mockItem) => {
     if (!allAvailableBooks.some((b) => b.id === mockItem.id || b.title.trim().toLowerCase() === mockItem.title.trim().toLowerCase())) {
       allAvailableBooks.push(mockItem);

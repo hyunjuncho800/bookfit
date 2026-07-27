@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { DiagnosticResultData, Book } from '../../types';
+import { RECOMMENDED_BOOKS_BY_AGE } from '../../data/seedBooksData';
 import { RadarChart } from './RadarChart';
 import { Award, TrendingUp, AlertTriangle, BookOpen, CheckCircle, HelpCircle, Heart, Share2, Printer, ArrowLeft, Sparkles, ShieldCheck } from 'lucide-react';
 import { shareKakaoReport } from '../../lib/kakaoShare';
@@ -230,7 +231,7 @@ export const DiagnosticReport: React.FC<DiagnosticReportProps> = ({ data, onRest
 
         {/* 3-Step Prescribed Books Cards */}
         <div className="grid md:grid-cols-3 gap-6">
-          {data.prescribedBooks.map((book) => (
+          {(RECOMMENDED_BOOKS_BY_AGE[data.ageGroup || 'elementary_mid'] || data.prescribedBooks).slice(0, 6).map((book) => (
             <div
               key={book.id}
               onClick={() => onSelectBook(book)}

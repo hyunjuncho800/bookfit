@@ -7,11 +7,15 @@ export interface Book {
   gradeTag: string; // e.g., "초등 3~4학년"
   lexileLevel: string; // e.g., "어휘 Level 3"
   trackType: 'comfort' | 'challenge' | 'supplement'; // 70% 적응, 10% 탐구, 20% 클리닉
-  recommendReason: string;
-  summary: string;
-  vocabularyPoints: string[];
-  parentQuestions: string[];
-  rating: number;
+  recommendReason?: string;
+  summary?: string;
+  description?: string;
+  quizWords?: string[];
+  vocabularyPoints?: string[];
+  parentQuestions?: string[];
+  rating?: number;
+  isbn?: string;
+  pubDate?: string;
 }
 
 export interface QuizQuestion {
