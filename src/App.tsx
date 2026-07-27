@@ -6,6 +6,7 @@ import { TrackCalculator } from './components/TrackCalculator';
 import { BookshelfSection } from './components/BookshelfSection';
 import { BookSearchSection } from './components/search/BookSearchSection';
 import { MyLibrarySection } from './components/library/MyLibrarySection';
+import { MyPageSection } from './components/parent/MyPageSection';
 import { Footer } from './components/Footer';
 import { DiagnosisFlow } from './components/diagnosis/DiagnosisFlow';
 import { BookDetailModal } from './components/BookDetailModal';
@@ -13,11 +14,17 @@ import { AuthModal } from './components/AuthModal';
 import type { Book } from './types';
 
 export function App() {
-  const [currentView, setCurrentView] = useState<'landing' | 'diagnosis'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'diagnosis' | 'mypage'>('landing');
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const handleNavigate = (sectionId: string) => {
+    if (sectionId === 'mypage') {
+      setCurrentView('mypage');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     if (currentView !== 'landing') {
       setCurrentView('landing');
       setTimeout(() => {
@@ -72,6 +79,15 @@ export function App() {
           />
 
           {/* Footer */}
+          <Footer />
+        </main>
+      ) : currentView === 'mypage' ? (
+        /* Standalone MyPage Parent Center */
+        <main>
+          <MyPageSection
+            onOpenDiagnosis={() => setCurrentView('diagnosis')}
+            onSelectBook={(book) => setSelectedBook(book)}
+          />
           <Footer />
         </main>
       ) : (

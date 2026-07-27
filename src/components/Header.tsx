@@ -110,7 +110,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDiagnosis, onNavigate, onO
 
             {user && (
               <button
-                onClick={() => handleNavClick('my-library')}
+                onClick={() => handleNavClick('mypage')}
                 className="text-forest-dark hover:text-forest font-bold text-sm transition-colors py-2 whitespace-nowrap tracking-tight relative group flex items-center gap-1"
               >
                 <span>마이페이지 📊</span>
@@ -124,7 +124,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDiagnosis, onNavigate, onO
             {user ? (
               <div className="flex items-center gap-3 bg-cream-card px-3 py-1.5 rounded-xl border border-oak/30">
                 <button
-                  onClick={() => handleNavClick('my-library')}
+                  onClick={() => handleNavClick('mypage')}
                   className="text-xs font-bold text-forest hover:text-forest-dark flex items-center gap-1.5 transition-colors"
                   title="마이페이지 이동"
                 >
@@ -269,6 +269,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDiagnosis, onNavigate, onO
           >
             마이 서재
           </button>
+
+          {user && (
+            <button
+              onClick={() => handleNavClick('mypage')}
+              className="block w-full text-left px-4 py-2.5 rounded-xl text-sm font-bold text-forest-dark bg-forest/10 hover:bg-forest/20 transition-colors whitespace-nowrap"
+            >
+              마이페이지 (성장 리포트 📊)
+            </button>
+          )}
 
           {/* Admin Mode Menu item only for Admin users in Mobile */}
           {isAdminUser && (

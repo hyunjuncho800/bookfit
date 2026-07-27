@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { MyBookItem, ReadingStatus, Book, UserGamificationProfile } from '../../types';
-import { Award, Star, Sparkles, CheckCircle2, Edit3, X, Zap, Trophy, Smile, MessageCircle, BarChart3 } from 'lucide-react';
+import { Award, Star, Sparkles, CheckCircle2, Edit3, X, Zap, Trophy, Smile, MessageCircle, BarChart3, BookOpen } from 'lucide-react';
 import { BookCoverImage } from '../common/BookCoverImage';
 import { ParentReportModal } from '../parent/ParentReportModal';
 import {
@@ -361,28 +361,37 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
         {/* 3. Wood Shelf Book Grid */}
         <div className="relative pt-4 pb-8 space-y-12">
           {filteredMyBooks.length === 0 ? (
-            <div className="py-16 px-6 bg-cream-card rounded-3xl border-2 border-dashed border-oak/30 text-center space-y-4 max-w-lg mx-auto shadow-sm">
+            <div className="py-16 px-6 bg-cream-card rounded-3xl border-2 border-dashed border-oak/30 text-center space-y-5 max-w-lg mx-auto shadow-sm">
               <div className="w-14 h-14 bg-oak/20 rounded-2xl flex items-center justify-center mx-auto text-forest text-2xl">
                 📚
               </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-bold font-serif text-charcoal">
+              <div className="space-y-1.5">
+                <h3 className="text-base sm:text-lg font-bold font-serif text-charcoal">
                   아직 서재에 담긴 책이 없습니다.
                 </h3>
                 <p className="text-xs text-charcoal-muted leading-relaxed">
-                  [3-Step 맞춤 서가]에서 아이의 읽기 파트너 도서를 선택하여 내 서재에 담아보세요!
+                  무료 문해력 진단 후 아이의 읽기 능력에 꼭 맞는 추천 도서를 서재에 담아보세요!
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  const el = document.getElementById('tracks') || document.getElementById('bookshelf');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="px-6 py-2.5 bg-forest hover:bg-forest-dark text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5"
-              >
-                <Sparkles className="w-4 h-4 text-oak" />
-                <span>맞춤 추천 도서 둘러보기</span>
-              </button>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-1">
+                <button
+                  onClick={onOpenDiagnosis}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-forest hover:bg-forest-dark text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-4 h-4 text-oak" />
+                  <span>무료 문해력 진단 시작하기</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const el = document.getElementById('tracks') || document.getElementById('bookshelf');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-cream-light border border-oak/40 hover:bg-cream-dark text-forest font-bold text-xs rounded-xl transition-all inline-flex items-center justify-center gap-1.5"
+                >
+                  <BookOpen className="w-4 h-4 text-oak-dark" />
+                  <span>맞춤 서가 둘러보기</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-8">
