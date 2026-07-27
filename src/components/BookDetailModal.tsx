@@ -145,23 +145,23 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
       return;
     }
 
-    const res = await saveOrUpdateLibraryBook(book, 'wantToRead');
+    const res = await saveOrUpdateLibraryBook(book, 'reading');
 
     if (res.success) {
       setIsSaved(true);
-      alert(`🎉 '${book.title}' 도서가 내 서재의 [읽을 책]에 성공적으로 추가되었습니다!`);
-      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'wantToRead' } }));
+      alert(`🎉 '${book.title}' 도서가 내 서재의 [읽는 중]에 성공적으로 추가되었습니다!`);
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'reading' } }));
     } else {
       console.warn('DB 등록 실패 fallback, localstorage 보존:', res.errorMessage);
       saveGuestLibraryBook({
         id: `guest_${book.id}`,
         book,
-        status: 'wantToRead',
+        status: 'reading',
         progressPercent: 0
       });
       setIsSaved(true);
       alert(`🔖 '${book.title}' 도서가 내 서재에 등록되었습니다!`);
-      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'wantToRead' } }));
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'reading' } }));
     }
   };
 

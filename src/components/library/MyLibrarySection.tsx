@@ -11,6 +11,7 @@ import {
   updateLibraryBookReviewAndRating,
   supabase,
 } from '../../services/supabaseService';
+import { getGuestLibraryBooks } from '../../services/authService';
 
 interface MyLibrarySectionProps {
   onSelectBook: (book: Book) => void;
@@ -127,8 +128,28 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
 
   const loadLibraryData = async () => {
     const dbBooks = await fetchMyLibraryFromDb();
+    const guestBooks = getGuestLibraryBooks();
+
+    const mergedMap = new Map<string, MyBookItem>();
+
     if (dbBooks && dbBooks.length > 0) {
-      setMyBooks(dbBooks);
+      dbBooks.forEach((b) => {
+        const key = String(b.book?.id || b.id || Math.random());
+        mergedMap.set(key, b);
+      });
+    }
+    if (guestBooks && guestBooks.length > 0) {
+      guestBooks.forEach((g) => {
+        const key = String(g.book?.id || g.id || Math.random());
+        if (!mergedMap.has(key)) {
+          mergedMap.set(key, g);
+        }
+      });
+    }
+
+    const merged = Array.from(mergedMap.values());
+    if (merged.length > 0) {
+      setMyBooks(merged);
     }
   };
 

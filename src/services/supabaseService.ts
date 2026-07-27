@@ -116,16 +116,23 @@ export async function getLatestDiagnosticResultFromDb(): Promise<DiagnosticResul
  */
 export async function fetchMyLibraryFromDb(): Promise<MyBookItem[]> {
   try {
-    const { data, error } = await supabase
-      .from('my_library')
-      .select('*');
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id;
 
-    if (error) {
-      console.error('Error fetching my_library:', error);
-      return [];
+    let query = supabase.from('my_library').select('*');
+    if (userId) {
+      query = query.eq('user_id', userId);
     }
 
-    if (!data) return [];
+    let { data, error } = await query;
+
+    if (error || !data || data.length === 0) {
+      // Fallback query without user_id filter if empty
+      const fallback = await supabase.from('my_library').select('*');
+      data = fallback.data || [];
+    }
+
+    if (!data || data.length === 0) return [];
 
     return data.map((item: any) => {
       const bookData: Book = item.book || {
@@ -133,7 +140,7 @@ export async function fetchMyLibraryFromDb(): Promise<MyBookItem[]> {
         title: item.title || '제목 없음',
         author: item.author || '저자 미상',
         publisher: item.publisher || '출판사',
-        coverImage: item.cover_image || item.coverImage || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400',
+        coverImage: item.cover_image || item.cover_url || item.coverImage || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400',
         gradeTag: item.grade_tag || item.gradeTag || '전 학년',
         lexileLevel: item.lexile_level || item.lexileLevel || 'Level 1',
         trackType: item.track_type || item.trackType || 'comfort',
@@ -144,12 +151,22 @@ export async function fetchMyLibraryFromDb(): Promise<MyBookItem[]> {
         rating: item.book_rating || item.rating || 5,
       };
 
+      const rawStatus = String(item.status || 'reading').toLowerCase();
+      let normStatus: ReadingStatus = 'reading';
+      if (rawStatus.includes('to_read') || rawStatus.includes('wanttoread') || rawStatus.includes('unread')) {
+        normStatus = 'wantToRead';
+      } else if (rawStatus.includes('complete')) {
+        normStatus = 'completed';
+      } else {
+        normStatus = 'reading';
+      }
+
       return {
-        id: String(item.id),
+        id: String(item.id || item.book_id),
         book: bookData,
-        status: (item.status as ReadingStatus) || 'wantToRead',
-        progressPercent: item.progress_percent ?? item.progressPercent ?? 0,
-        userRating: item.rating ?? item.user_rating ?? item.userRating ?? 0,
+        status: normStatus,
+        progressPercent: item.progress_percent ?? item.progressPercent ?? (normStatus === 'completed' ? 100 : normStatus === 'reading' ? 50 : 0),
+        userRating: item.rating ?? item.user_rating ?? item.userRating ?? 5,
         oneLineReview: item.one_line_review ?? item.oneLineReview ?? '',
         completedAt: item.completed_at ?? item.completedAt,
         newWordsLearned: item.new_words_learned ?? item.newWordsLearned ?? [],
