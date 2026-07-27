@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SAMPLE_QUIZZES } from '../data/mockData';
+import { LITERACY_TEST_QUESTIONS, calculateFinalResults } from '../data/diagnosticData';
 import { X, CheckCircle2, Award, BookOpen, ArrowRight, RotateCcw, Sparkles } from 'lucide-react';
 
 interface DiagnosisModalProps {
@@ -16,7 +16,8 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({ isOpen, onClose,
 
   if (!isOpen) return null;
 
-  const currentQuiz = SAMPLE_QUIZZES[currentStep];
+  const questions = LITERACY_TEST_QUESTIONS;
+  const currentQuiz = questions[currentStep];
 
   const handleSelectOption = (index: number) => {
     const updated = [...selectedAnswers];
@@ -25,7 +26,7 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({ isOpen, onClose,
   };
 
   const handleNext = () => {
-    if (currentStep < SAMPLE_QUIZZES.length - 1) {
+    if (currentStep < questions.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
       setIsCompleted(true);
@@ -38,10 +39,11 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({ isOpen, onClose,
     setIsCompleted(false);
   };
 
-  // Calculate Scores
-  const correctCount = selectedAnswers.reduce((acc, ans, idx) => {
-    return ans === SAMPLE_QUIZZES[idx].answer ? acc + 1 : acc;
-  }, 0);
+  // Calculate Scores via calculateFinalResults
+  const finalResults = calculateFinalResults(selectedAnswers);
+  const correctCount = finalResults.correctCount;
+  const totalScore = finalResults.totalScore;
+  const levelText = finalResults.level;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/70 backdrop-blur-md animate-fadeIn">
@@ -55,10 +57,10 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({ isOpen, onClose,
             </div>
             <div>
               <h3 className="text-lg font-bold font-serif">
-                북핏(BookFit) 3D 정밀 문해력 진단
+                [학술 기반 정밀 문해력 진단]
               </h3>
               <p className="text-xs text-cream-card/80">
-                어휘력 · 추론력 · 메타인지 종합 진단 테스트
+                5대 학술 프레임워크 입각 12문항 정밀 검사
               </p>
             </div>
           </div>
@@ -91,33 +93,23 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({ isOpen, onClose,
             {/* Progress Bar */}
             <div className="space-y-1.5">
               <div className="flex justify-between text-xs text-charcoal font-semibold">
-                <span>문항 {currentStep + 1} / {SAMPLE_QUIZZES.length}</span>
-                <span className="text-forest">{currentQuiz.categoryLabel}</span>
+                <span>문항 {currentStep + 1} / {questions.length}</span>
+                <span className="text-forest">{currentQuiz.category}</span>
               </div>
               <div className="w-full bg-cream-dark h-2 rounded-full overflow-hidden">
                 <div
                   className="bg-forest h-full rounded-full transition-all duration-300"
-                  style={{ width: `${((currentStep + 1) / SAMPLE_QUIZZES.length) * 100}%` }}
+                  style={{ width: `${((currentStep + 1) / questions.length) * 100}%` }}
                 />
               </div>
             </div>
 
-            {/* Quiz Passage Card */}
-            {currentQuiz.passage && (
-              <div className="p-4 bg-[#FAF5EE] rounded-xl border-l-4 border-oak text-xs text-charcoal leading-relaxed font-serif">
-                <span className="block text-[10px] text-oak-dark font-sans font-bold uppercase mb-1">
-                  [제시문]
-                </span>
-                "{currentQuiz.passage}"
-              </div>
-            )}
-
             {/* Question Title */}
             <div className="space-y-1">
               <span className="text-[11px] font-bold text-forest bg-forest/10 px-2.5 py-0.5 rounded-full">
-                Q{currentStep + 1}. {currentQuiz.categoryLabel}
+                Q{currentStep + 1}. {currentQuiz.category}
               </span>
-              <h4 className="text-base sm:text-lg font-bold text-charcoal leading-snug">
+              <h4 className="text-base sm:text-lg font-bold text-charcoal leading-snug whitespace-pre-line">
                 {currentQuiz.question}
               </h4>
             </div>
@@ -160,7 +152,7 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({ isOpen, onClose,
                 우리 아이 맞춤 독서 핏 분석 결과
               </h4>
               <p className="text-xs text-charcoal-muted">
-                정밀 측정된 종합 문해력 핏 점수입니다.
+                5대 국제 학술 프레임워크 12문항 정밀 측정 결과입니다.
               </p>
             </div>
 
@@ -168,21 +160,15 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({ isOpen, onClose,
             <div className="p-5 bg-cream-card rounded-2xl border border-oak/30 max-w-md mx-auto space-y-4">
               <div className="flex justify-around items-center divide-x divide-oak/20">
                 <div className="px-3">
-                  <p className="text-[11px] text-charcoal-muted">진단 맞춤율</p>
+                  <p className="text-[11px] text-charcoal-muted">종합 점수</p>
                   <p className="text-2xl font-bold text-forest font-serif mt-0.5">
-                    {Math.round((correctCount / SAMPLE_QUIZZES.length) * 100)}%
+                    {totalScore}점
                   </p>
                 </div>
                 <div className="px-3">
-                  <p className="text-[11px] text-charcoal-muted">어휘 추천 레벨</p>
-                  <p className="text-xl font-bold text-oak-dark font-serif mt-0.5">
-                    Level 3.2
-                  </p>
-                </div>
-                <div className="px-3">
-                  <p className="text-[11px] text-charcoal-muted">권장 3-Track</p>
-                  <p className="text-xs font-bold text-forest mt-1">
-                    70:10:20 표준
+                  <p className="text-[11px] text-charcoal-muted">학술 독서 레벨</p>
+                  <p className="text-sm font-bold text-oak-dark font-serif mt-0.5">
+                    {levelText}
                   </p>
                 </div>
               </div>
@@ -193,7 +179,7 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({ isOpen, onClose,
                   북핏 총평 리포트
                 </p>
                 <p className="text-charcoal leading-relaxed">
-                  어휘 이해력과 상황 맥락 파악 능력이 뛰어납니다. <strong className="text-forest font-semibold">적정 도서 70%</strong>로 읽기 몰입감을 유지하면서, 약간의 비유적 속담 도서(<strong className="text-oak-dark font-semibold">보완 도서 20%</strong>)를 병행하면 독해력이 급격히 성장할 것입니다.
+                  12개 학술 진단 결과 정답 수 <strong className="text-forest font-bold">{correctCount}/{questions.length}</strong>개로 최종 점수는 <strong className="text-forest font-bold">{totalScore}점</strong>입니다.
                 </p>
               </div>
             </div>

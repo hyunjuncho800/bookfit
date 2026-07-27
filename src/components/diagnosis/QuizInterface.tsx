@@ -73,23 +73,16 @@ export const QuizInterface: React.FC<QuizInterfaceProps> = ({ questions, onCompl
       <div className="bg-cream-light border border-oak/30 rounded-2xl p-5 shadow-sm space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-white bg-forest px-3 py-1 rounded-full shadow-sm">
+              [학술 기반 정밀 문해력 진단]
+            </span>
             <span className="text-xs font-bold text-forest bg-forest/10 px-3 py-1 rounded-full">
-              {currentQ.domainName}
+              {(currentQ as any).category || currentQ.domainName}
             </span>
             <span className="text-xs font-semibold text-charcoal-muted">
               문항 {currentIndex + 1} / {questions.length}
             </span>
           </div>
-
-          {/* Countdown Timer for Time-Attack Questions */}
-          {timeLeft !== null && (
-            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-mono text-xs font-bold ${
-              timeLeft <= 5 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-oak/20 text-oak-dark'
-            }`}>
-              <Clock className="w-3.5 h-3.5" />
-              <span>제한시간: {timeLeft}초</span>
-            </div>
-          )}
 
           <div className="text-xs font-bold text-oak-dark">
             진도율 {progressPercent}%
@@ -112,10 +105,7 @@ export const QuizInterface: React.FC<QuizInterfaceProps> = ({ questions, onCompl
         <div className="flex items-center justify-between border-b border-cream-dark pb-4">
           <span className="text-xs font-bold text-oak-dark flex items-center gap-1">
             <Sparkles className="w-4 h-4 text-oak" />
-            {currentQ.domain === 'decoding' && '⚡ 기초 해독 유창성 (타임어택)'}
-            {currentQ.domain === 'vocabulary' && '📚 어휘 & 문장구조 진단'}
-            {currentQ.domain === 'comprehension' && '🔍 고차 독해 & 추론 사고력'}
-            {currentQ.domain === 'metacognition' && '🧠 메타인지 독서 전략 점검'}
+            {(currentQ as any).category || currentQ.domainName}
           </span>
 
           <button
