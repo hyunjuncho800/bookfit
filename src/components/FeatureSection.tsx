@@ -1,7 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Target, Layers, FileText, Sparkles, Check, HelpCircle } from 'lucide-react';
+import { FeatureDetailModal } from './modals/FeatureDetailModal';
+import type { FeatureModalType } from './modals/FeatureDetailModal';
 
-export const FeatureSection: React.FC = () => {
+interface FeatureSectionProps {
+  onOpenDiagnosis?: () => void;
+}
+
+export const FeatureSection: React.FC<FeatureSectionProps> = ({ onOpenDiagnosis }) => {
+  const [activeModal, setActiveModal] = useState<FeatureModalType>(null);
+
   return (
     <section id="features" className="py-20 bg-cream-card/50 border-y border-[#EAE3D2] relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -25,7 +33,10 @@ export const FeatureSection: React.FC = () => {
         <div className="grid md:grid-cols-3 gap-8">
           
           {/* Card 1: 3차원 정밀 진단 */}
-          <div className="group relative bg-cream-light border border-oak/30 hover:border-forest/50 rounded-2xl p-8 shadow-book hover:shadow-elevated transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between">
+          <div
+            onClick={() => setActiveModal('structure')}
+            className="group relative bg-cream-light border border-oak/30 hover:border-forest/50 rounded-2xl p-8 shadow-book hover:shadow-elevated transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between cursor-pointer"
+          >
             <div className="space-y-5">
               {/* Icon Container */}
               <div className="w-14 h-14 rounded-2xl bg-forest text-oak flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
@@ -60,14 +71,23 @@ export const FeatureSection: React.FC = () => {
               </ul>
             </div>
 
-            <div className="mt-6 pt-4 text-xs font-semibold text-forest flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveModal('structure');
+              }}
+              className="mt-6 pt-4 text-xs font-semibold text-forest flex items-center gap-1 group-hover:translate-x-1 transition-transform cursor-pointer outline-none"
+            >
               <span>진단 구조 알아보기</span>
               <span>→</span>
-            </div>
+            </button>
           </div>
 
           {/* Card 2: 3-Track 맞춤 추천 */}
-          <div className="group relative bg-cream-light border border-oak/30 hover:border-oak-dark rounded-2xl p-8 shadow-book hover:shadow-elevated transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between">
+          <div
+            onClick={() => setActiveModal('ratio')}
+            className="group relative bg-cream-light border border-oak/30 hover:border-oak-dark rounded-2xl p-8 shadow-book hover:shadow-elevated transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between cursor-pointer"
+          >
             {/* Recommended Tag */}
             <div className="absolute top-4 right-4 text-[10px] font-bold bg-oak text-forest-dark px-2.5 py-1 rounded-full shadow-sm">
               핵심 로직
@@ -107,14 +127,23 @@ export const FeatureSection: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-6 pt-4 text-xs font-semibold text-oak-dark flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveModal('ratio');
+              }}
+              className="mt-6 pt-4 text-xs font-semibold text-oak-dark flex items-center gap-1 group-hover:translate-x-1 transition-transform cursor-pointer outline-none"
+            >
               <span>황금 비율 상세 보기</span>
               <span>→</span>
-            </div>
+            </button>
           </div>
 
           {/* Card 3: 독후 가이드 & 리포트 */}
-          <div className="group relative bg-cream-light border border-oak/30 hover:border-forest/50 rounded-2xl p-8 shadow-book hover:shadow-elevated transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between">
+          <div
+            onClick={() => setActiveModal('report')}
+            className="group relative bg-cream-light border border-oak/30 hover:border-forest/50 rounded-2xl p-8 shadow-book hover:shadow-elevated transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between cursor-pointer"
+          >
             <div className="space-y-5">
               {/* Icon Container */}
               <div className="w-14 h-14 rounded-2xl bg-forest text-oak flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
@@ -144,15 +173,28 @@ export const FeatureSection: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-6 pt-4 text-xs font-semibold text-forest flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveModal('report');
+              }}
+              className="mt-6 pt-4 text-xs font-semibold text-forest flex items-center gap-1 group-hover:translate-x-1 transition-transform cursor-pointer outline-none"
+            >
               <span>샘플 리포트 확인</span>
               <span>→</span>
-            </div>
+            </button>
           </div>
 
         </div>
 
       </div>
+
+      {/* Feature Details Modal */}
+      <FeatureDetailModal
+        modalType={activeModal}
+        onClose={() => setActiveModal(null)}
+        onOpenDiagnosis={onOpenDiagnosis}
+      />
     </section>
   );
 };

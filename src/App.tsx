@@ -45,7 +45,7 @@ export function App() {
           />
 
           {/* Feature Section (3 Features) */}
-          <FeatureSection />
+          <FeatureSection onOpenDiagnosis={() => setCurrentView('diagnosis')} />
 
           {/* 3-Step Golden Ratio Visualizer */}
           <TrackCalculator />
