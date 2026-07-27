@@ -144,6 +144,9 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
         completedCountThisMonth: prev.completedCountThisMonth + 1,
       }));
 
+      // Switch to completed tab immediately
+      setActiveTab('completed');
+
       // Trigger Celebration Banner
       setShowCelebration(true);
       setTimeout(() => setShowCelebration(false), 3500);
@@ -159,6 +162,9 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     const res = await updateLibraryBookStatus(targetId, newStatus);
     if (res.success) {
       await loadLibraryData();
+      if (newStatus === 'completed') {
+        setActiveTab('completed');
+      }
       window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
     } else {
       alert(`⚠️ 상태 변경 실패: ${res.errorMessage}`);

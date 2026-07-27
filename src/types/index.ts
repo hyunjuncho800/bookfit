@@ -98,14 +98,24 @@ export interface VocabularyQuizItem {
   word: string;
   meaning: string;
   question: string;
-  options?: string[];
-  answerIndex?: number;
+  options: string[];
+  answerIndex: number;
+}
+
+export interface DialogueGuide {
+  before: string;
+  during: string;
+  after: string;
 }
 
 export interface AIGeneratedGuide {
-  beforeReading: string[];
-  duringReading: string[];
-  afterReading: string[];
+  summary?: string;
+  recommendationReason?: string;
+  dialogueGuide?: DialogueGuide;
   vocabularyQuiz: VocabularyQuizItem[];
+  vocabularyReport?: string;
+  beforeReading?: string[];
+  duringReading?: string[];
+  afterReading?: string[];
   recommendReason?: string;
 }

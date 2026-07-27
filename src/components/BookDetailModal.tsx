@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { Book, AIGeneratedGuide } from '../types';
-import { generateBookGuideAI } from '../services/aiGuideGenerator';
+import { generateBookGuide } from '../services/aiGuideGenerator';
 import { saveOrUpdateLibraryBook } from '../services/supabaseService';
 import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, BookmarkCheck, ArrowRight, ShoppingBag, Brain, Loader2 } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
@@ -25,14 +25,21 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
 
     let isMounted = true;
     setIsLoadingAI(true);
+    setAiGuide(null);
+    setSelectedQuizAnswers({});
 
-    generateBookGuideAI({
-      title: book.title,
-      description: book.summary,
-      targetAge: book.gradeTag,
-    }).then((guide) => {
+    generateBookGuide(
+      book.title,
+      book.summary || (book as any).description,
+      book.gradeTag
+    ).then((guide) => {
       if (isMounted) {
         setAiGuide(guide);
+        setIsLoadingAI(false);
+      }
+    }).catch((err) => {
+      console.error('Gemini API Error in modal:', err);
+      if (isMounted) {
         setIsLoadingAI(false);
       }
     });
@@ -209,8 +216,8 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                 <span className="text-[10px] font-bold text-forest uppercase tracking-wider block">
                   [줄거리 & 서평 요약]
                 </span>
-                <p className="text-xs sm:text-sm text-charcoal leading-relaxed">
-                  {book.summary || (book as any).description || `${book.title}은(는) 아동의 어휘 확장과 사고력 향상을 돕는 북핏 맞춤 추천 도서입니다.`}
+                <p className="text-xs sm:text-sm text-charcoal leading-relaxed whitespace-pre-line">
+                  {aiGuide?.summary || book.summary || (book as any).description || `${book.title}은(는) 아동의 어휘 확장과 사고력 향상을 돕는 북핏 맞춤 추천 도서입니다.`}
                 </p>
               </div>
 
@@ -221,7 +228,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                   북핏 AI 연구소 큐레이션 추천 사유
                 </p>
                 <p className="text-xs text-charcoal font-medium italic">
-                  "{aiGuide?.recommendReason || book.recommendReason || `${book.title}은(는) ${book.gradeTag || '해당 학년'} 학생의 문해 지수와 독해력 확장을 위해 엄선된 맞춤 추천 도서입니다.`}"
+                  "{aiGuide?.recommendationReason || aiGuide?.recommendReason || book.recommendReason || `${book.title}은(는) ${book.gradeTag || '해당 학년'} 학생의 문해 지수와 독해력 확장을 위해 엄선된 맞춤 추천 도서입니다.`}"
                 </p>
               </div>
 
@@ -269,13 +276,20 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
               </button>
             </div>
 
-            {/* AI Loading State */}
+            {/* AI Loading State with Skeleton */}
             {isLoadingAI && (
-              <div className="py-10 text-center space-y-2 bg-cream-card rounded-2xl border border-oak/20">
-                <Loader2 className="w-7 h-7 text-forest animate-spin mx-auto" />
-                <p className="text-xs font-bold text-forest">
-                  18년 차 아동 언어재활사 AI가 맞춤 독후 질문과 어휘 퀴즈를 심도 있게 구성 중입니다...
-                </p>
+              <div className="py-8 px-6 space-y-4 bg-cream-card rounded-2xl border border-oak/20 animate-pulse">
+                <div className="flex items-center justify-center gap-2 text-forest">
+                  <Loader2 className="w-6 h-6 animate-spin text-forest" />
+                  <span className="text-xs font-bold">
+                    AI 전문가가 맞춤 독후 가이드를 생성 중입니다...
+                  </span>
+                </div>
+                <div className="grid sm:grid-cols-3 gap-3 pt-2">
+                  <div className="h-24 bg-cream-dark/50 rounded-xl"></div>
+                  <div className="h-24 bg-cream-dark/50 rounded-xl"></div>
+                  <div className="h-24 bg-cream-dark/50 rounded-xl"></div>
+                </div>
               </div>
             )}
 
@@ -293,11 +307,9 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                     <span className="text-[10px] font-bold text-forest bg-forest/15 px-2.5 py-0.5 rounded-full inline-block">
                       1. 읽기 전 (Before)
                     </span>
-                    {aiGuide.beforeReading.map((q, idx) => (
-                      <p key={idx} className="text-xs text-charcoal font-medium leading-relaxed italic">
-                        "{q}"
-                      </p>
-                    ))}
+                    <p className="text-xs text-charcoal font-medium leading-relaxed italic">
+                      "{aiGuide.dialogueGuide?.before || aiGuide.beforeReading?.[0] || `표지와 제목 "${book.title}"을 보았을 때, 어떤 이야기가 펼쳐질지 생각해보자.`}"
+                    </p>
                   </div>
 
                   {/* During */}
@@ -305,11 +317,9 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                     <span className="text-[10px] font-bold text-oak-dark bg-oak/20 px-2.5 py-0.5 rounded-full inline-block">
                       2. 읽는 중 (During)
                     </span>
-                    {aiGuide.duringReading.slice(0, 2).map((q, idx) => (
-                      <p key={idx} className="text-xs text-charcoal font-medium leading-relaxed italic">
-                        "{q}"
-                      </p>
-                    ))}
+                    <p className="text-xs text-charcoal font-medium leading-relaxed italic">
+                      "{aiGuide.dialogueGuide?.during || aiGuide.duringReading?.[0] || `주인공이 결정적인 순간에 어떤 선택을 할지 추론해볼까?`}"
+                    </p>
                   </div>
 
                   {/* After */}
@@ -317,11 +327,9 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                     <span className="text-[10px] font-bold text-charcoal bg-charcoal/10 px-2.5 py-0.5 rounded-full inline-block">
                       3. 읽은 후 (After)
                     </span>
-                    {aiGuide.afterReading.slice(0, 2).map((q, idx) => (
-                      <p key={idx} className="text-xs text-charcoal font-medium leading-relaxed italic">
-                        "{q}"
-                      </p>
-                    ))}
+                    <p className="text-xs text-charcoal font-medium leading-relaxed italic">
+                      "{aiGuide.dialogueGuide?.after || aiGuide.afterReading?.[0] || `책을 다 읽고 난 후 기억에 남는 장면이나 내 생각은 무엇이니?`}"
+                    </p>
                   </div>
                 </div>
               </div>
@@ -332,7 +340,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
               <div className="space-y-4 pt-1">
                 <div className="p-3 bg-forest/10 rounded-xl text-xs text-forest font-semibold flex items-center gap-2">
                   <Brain className="w-4 h-4 text-forest shrink-0" />
-                  <span>이 책에서 추출된 핵심 어휘 퀴즈를 풀어보세요!</span>
+                  <span>이 책에서 추출된 맞춤 어휘 퀴즈 3문항을 풀어보세요!</span>
                 </div>
 
                 <div className="space-y-3">
@@ -340,9 +348,9 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                     <div key={qIdx} className="p-4 bg-cream-card rounded-2xl border border-oak/30 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-forest bg-forest/15 px-2.5 py-0.5 rounded">
-                          어휘: {quiz.word}
+                          어휘 {qIdx + 1}: {quiz.word}
                         </span>
-                        <span className="text-[11px] text-charcoal-muted">{quiz.meaning}</span>
+                        <span className="text-[11px] text-charcoal-muted font-medium">{quiz.meaning}</span>
                       </div>
                       <p className="text-xs font-bold text-charcoal mt-1">
                         Q{qIdx + 1}. {quiz.question}
@@ -357,15 +365,20 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                               <button
                                 key={oIdx}
                                 onClick={() => handleQuizSelect(qIdx, oIdx)}
-                                className={`p-2.5 rounded-xl border text-xs font-medium transition-all text-left ${
+                                className={`p-2.5 rounded-xl border text-xs font-medium transition-all text-left flex items-center justify-between ${
                                   isSelected
                                     ? isCorrect
-                                      ? 'bg-forest/20 border-forest text-forest font-bold'
-                                      : 'bg-red-100 border-red-400 text-red-600'
+                                      ? 'bg-forest/20 border-forest text-forest font-bold ring-2 ring-forest/30'
+                                      : 'bg-red-100 border-red-400 text-red-600 font-bold'
                                     : 'bg-cream-light border-oak/30 hover:bg-cream'
                                 }`}
                               >
-                                {oIdx + 1}. {opt}
+                                <span>{oIdx + 1}. {opt}</span>
+                                {isSelected && (
+                                  <span className="text-[11px] ml-1">
+                                    {isCorrect ? '⭕ 정답!' : '❌ 오답'}
+                                  </span>
+                                )}
                               </button>
                             );
                           })}
@@ -379,27 +392,29 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
 
             {/* Tab 3: Vocabulary Key Points */}
             {!isLoadingAI && activeTab === 'vocab' && (
-              <div className="p-5 bg-cream-card rounded-2xl border border-oak/20 space-y-3">
-                <h4 className="text-xs font-bold text-forest uppercase tracking-wider flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4 text-oak" />
-                  "{book.title}" 핵심 어휘 리포트 (Vocabulary Keys)
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {((book.vocabularyPoints && book.vocabularyPoints.length > 0)
-                    ? book.vocabularyPoints
-                    : aiGuide?.vocabularyQuiz?.map((q) => q.word) || ['문맥 이해', '교과 어휘', '사고력 확장']
-                  ).map((word, idx) => (
-                    <span
-                      key={idx}
-                      className="text-xs font-bold text-forest bg-forest/10 border border-forest/20 px-3.5 py-1.5 rounded-xl"
-                    >
-                      # {word}
-                    </span>
-                  ))}
+              <div className="space-y-4 pt-1">
+                <div className="p-5 bg-cream-card rounded-2xl border border-oak/20 space-y-3">
+                  <h4 className="text-xs font-bold text-forest uppercase tracking-wider flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4 text-oak" />
+                    "{book.title}" 핵심 어휘 지도 리포트
+                  </h4>
+                  <p className="text-xs text-charcoal leading-relaxed bg-forest/5 p-3.5 rounded-xl border border-forest/10">
+                    💡 {aiGuide?.vocabularyReport || `이 책을 통해 문맥 속 핵심 어휘를 파악하고 사고력을 균형 있게 확장할 수 있습니다.`}
+                  </p>
+
+                  <div className="grid sm:grid-cols-3 gap-3 pt-2">
+                    {aiGuide?.vocabularyQuiz?.map((vItem, vIdx) => (
+                      <div key={vIdx} className="p-3.5 bg-cream-light rounded-xl border border-oak/30 space-y-1.5">
+                        <span className="text-xs font-bold text-forest bg-forest/15 px-2.5 py-0.5 rounded inline-block">
+                          # {vItem.word}
+                        </span>
+                        <p className="text-xs text-charcoal font-medium leading-normal">
+                          {vItem.meaning}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-xs text-charcoal-muted leading-relaxed pt-1">
-                  이 책을 읽으며 위 어휘들의 실제 사용 문맥을 익히면 교과 어휘력 확장에 큰 도움이 됩니다.
-                </p>
               </div>
             )}
 

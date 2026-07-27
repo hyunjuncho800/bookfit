@@ -194,13 +194,12 @@ export async function saveOrUpdateLibraryBook(
       progress_percent: progressPercent,
       one_line_review: oneLineReview || '',
       rating: rating !== undefined ? rating : Number(item.rating) || 5,
-      updated_at: new Date().toISOString(),
     };
 
-    // 1차 Upsert 시도: my_library 테이블
+    // 1차 Upsert 시도: my_library 테이블 (book_id 중복 방지 onConflict 지정)
     let { error } = await supabase
       .from('my_library')
-      .upsert([bookPayload]);
+      .upsert([bookPayload], { onConflict: 'book_id' });
 
     if (error) {
       console.warn('First upsert(full bookPayload) failed, trying minimal payload:', error);
@@ -215,7 +214,7 @@ export async function saveOrUpdateLibraryBook(
 
       const { error: minErr } = await supabase
         .from('my_library')
-        .upsert([minimalPayload]);
+        .upsert([minimalPayload], { onConflict: 'book_id' });
 
       if (minErr) {
         const targetErr = minErr || error;
@@ -258,7 +257,6 @@ export async function updateLibraryBookReviewAndRating(
       .update({
         rating: rating,
         one_line_review: oneLineReview,
-        updated_at: new Date().toISOString(),
       })
       .eq('id', bookId);
 
@@ -269,7 +267,6 @@ export async function updateLibraryBookReviewAndRating(
         .update({
           rating: rating,
           oneLineReview: oneLineReview,
-          updatedAt: new Date().toISOString(),
         })
         .eq('id', bookId);
 
@@ -289,25 +286,18 @@ export async function updateLibraryBookReviewAndRating(
 export async function updateLibraryBookStatus(
   bookId: string,
   status: ReadingStatus | string,
-  progressPercent?: number
+  _progressPercent?: number
 ): Promise<{ success: boolean; errorMessage?: string }> {
   try {
-    const updateData: any = {
+    // 오직 status 컬럼만 안전하게 update 전송
+    const updatePayload = {
       status,
-      updated_at: new Date().toISOString(),
     };
-    if (progressPercent !== undefined) {
-      updateData.progress_percent = progressPercent;
-    }
-    if (status === 'completed' || status === 'COMPLETED') {
-      updateData.progress_percent = 100;
-      updateData.completed_at = new Date().toISOString();
-    }
 
     // 1차: book_id 및 id 이중 or 조건으로 비동기(await) Update 전송
     let { error } = await supabase
       .from('my_library')
-      .update(updateData)
+      .update(updatePayload)
       .or(`book_id.eq.${bookId},id.eq.${bookId}`);
 
     if (error) {
@@ -316,14 +306,14 @@ export async function updateLibraryBookStatus(
       // 2차: book_id 개별 Update
       const { error: errBookId } = await supabase
         .from('my_library')
-        .update(updateData)
+        .update(updatePayload)
         .eq('book_id', bookId);
 
       if (errBookId) {
         // 3차: id 개별 Update
         const { error: errId } = await supabase
           .from('my_library')
-          .update(updateData)
+          .update(updatePayload)
           .eq('id', bookId);
 
         if (errId) {
@@ -397,8 +387,6 @@ export const sanitizeBookPayload = (book: any, defaultTrack: string = 'comfort')
     vocabulary_points: Array.isArray(book.vocabularyPoints) ? book.vocabularyPoints : ['어휘력', '독해력'],
     parent_questions: Array.isArray(book.parentQuestions) ? book.parentQuestions : ['책의 핵심 내용을 나눠보세요.'],
     rating: Number(book.rating) || 4.9,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
   };
 };
 
