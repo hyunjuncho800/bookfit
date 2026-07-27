@@ -49,9 +49,11 @@ export const QuizInterface: React.FC<QuizInterfaceProps> = ({ questions, onCompl
   };
 
   const handleNext = () => {
+    console.log("제출된 답안 리스트 (진행 중):", userAnswers);
     if (currentIndex < questions.length - 1) {
       setCurrentIndex((prev) => prev + 1);
     } else {
+      console.log("제출된 답안 리스트 (최종 완료):", userAnswers);
       onComplete(userAnswers);
     }
   };

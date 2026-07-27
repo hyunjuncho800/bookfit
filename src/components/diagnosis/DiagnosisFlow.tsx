@@ -25,6 +25,8 @@ export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelect
   }, []);
 
   const handleQuizComplete = async (answers: Record<number, number>) => {
+    console.log("제출된 답안 리스트 (수신):", answers);
+
     // 1. Domain-specific scoring calculation
     const domainCounts: Record<DomainCategory, { correct: number; total: number }> = {
       decoding: { correct: 0, total: 0 },
@@ -41,9 +43,20 @@ export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelect
       domainCounts[domain].total += 1;
 
       const userAnswer = answers[q.id];
-      if (q.correctAnswer !== undefined && userAnswer === q.correctAnswer) {
-        domainCounts[domain].correct += 1;
-        totalCorrectCount += 1;
+      
+      if (q.correctAnswer !== undefined) {
+        // 1) 객관식 문항: String 변환으로 안전한 정답 비교 (Type casting)
+        const isCorrect = userAnswer !== undefined && String(userAnswer) === String(q.correctAnswer);
+        if (isCorrect) {
+          domainCounts[domain].correct += 1;
+          totalCorrectCount += 1;
+        }
+      } else if (q.questionType === 'likert' || q.domain === 'metacognition') {
+        // 2) 메타인지 Likert 5점 척도 문항: 선택 인덱스(0~4) 기반 1점~5점 척도 점수 환산
+        const val = userAnswer !== undefined ? Number(userAnswer) : 0;
+        const scoreRatio = (val + 1) / 5; // 0: 0.2, 1: 0.4, 2: 0.6, 3: 0.8, 4: 1.0 (5점 만점)
+        domainCounts[domain].correct += scoreRatio;
+        totalCorrectCount += scoreRatio;
       }
     });
 
@@ -55,8 +68,10 @@ export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelect
       metacognition: domainCounts.metacognition.total > 0 ? Math.round((domainCounts.metacognition.correct / domainCounts.metacognition.total) * 100) : 0,
     };
 
-    // Overall total score: Exact ratio, no baseline hardcoding!
+    // Overall total score (100점 만점 명확한 계산)
     const totalScore = totalQuestionsCount > 0 ? Math.round((totalCorrectCount / totalQuestionsCount) * 100) : 0;
+
+    console.log(`[채점 완료] 총 정답 환산 수: ${totalCorrectCount}/${totalQuestionsCount}, 계산된 최종 점수: ${totalScore}점`, domainScores);
 
     // 2. Dynamic level & prescription mapping based on totalScore
     let gradeLevelName = '어휘 기초 보완 클리닉 트랙';
@@ -69,9 +84,22 @@ export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelect
       '부모님이 직접 질문을 던지고 아이가 편하게 말할 수 있도록 격려하세요.'
     ];
 
-    if (totalScore >= 80) {
+    if (totalScore >= 95) {
+      gradeLevelName = '최우수 고차 추론 & 마스터 문해 트랙 (상위 1%)';
+      percentileTop = 1;
+      strengths = [
+        '전 영역(기초 해독, 어휘/구문, 고차 추론, 메타인지) 100점 마스터 달성',
+        '풍부한 고급 교과 어휘력 및 완벽한 비판적 문맥 추론 능력',
+        '자기 주도적 독서 전략 수립 및 메타인지 인지 능력 탁월'
+      ];
+      weaknesses = ['고난도 비문학(과학/철학/역사) 전문 서적 확장 권장'];
+      actionAdvice = [
+        '다양한 비문학 토론 도서를 읽고 자녀와 논리적 대화를 나눠보세요.',
+        '문학 5: 비문학 5 비율을 유지하며 독서 깊이를 심화시켜 주세요.'
+      ];
+    } else if (totalScore >= 80) {
       gradeLevelName = '고차 추론 & 비판적 독서 트랙';
-      percentileTop = Math.max(1, Math.round(30 - (totalScore - 80) * 1.3));
+      percentileTop = Math.max(2, Math.round(30 - (totalScore - 80) * 1.3));
       strengths = ['풍부한 어휘 구사력 및 문맥 추론 능력', '논리적 딜레마 문제해결력 및 메타인지 독서 전략'];
       weaknesses = ['고난도 비문학(과학/사회) 전문 용어 정밀 파악'];
       actionAdvice = [
