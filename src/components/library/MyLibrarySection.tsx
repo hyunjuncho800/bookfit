@@ -523,15 +523,27 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
 
                   </div>
 
-                  {/* Bottom Actions */}
+                  {/* Bottom Actions based on Reading Status */}
                   <div className="mt-4 pt-3 border-t border-cream-dark flex items-center justify-between text-xs">
-                    {item.status !== 'completed' ? (
+                    {isWantToRead(item.status) ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateStatus(item, 'reading');
+                          setActiveTab('reading');
+                        }}
+                        className="w-full py-2 bg-oak/20 hover:bg-oak/30 text-forest-dark font-bold rounded-xl border border-oak/40 transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <BookOpen className="w-4 h-4 text-forest" />
+                        <span>📖 읽는 중으로 변경</span>
+                      </button>
+                    ) : isReading(item.status) ? (
                       <button
                         onClick={(e) => handleCompleteBook(item, e)}
                         className="w-full py-2 bg-forest hover:bg-forest-dark text-white font-bold rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5"
                       >
                         <CheckCircle2 className="w-4 h-4 text-oak" />
-                        <span>완독 처리 & 경험치 받기</span>
+                        <span>🥳 완독 처리 & 퀴즈 검사 받기</span>
                       </button>
                     ) : (
                       <button

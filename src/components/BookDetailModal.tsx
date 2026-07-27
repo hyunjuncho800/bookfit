@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import type { Book, AIGeneratedGuide } from '../types';
 import { generateBookGuide } from '../services/aiGuideGenerator';
-import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb } from '../services/supabaseService';
+import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb, updateLibraryBookStatus } from '../services/supabaseService';
 import { getGuestLibraryBooks, saveGuestLibraryBook, removeGuestLibraryBook } from '../services/authService';
-import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, ArrowRight, ShoppingBag, Brain, Loader2, Trash2 } from 'lucide-react';
+import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, ShoppingBag, Brain, Loader2, Trash2 } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
 import { getCoupangSearchLink } from '../utils/linkUtils';
+import { BookQuizModal } from './library/BookQuizModal';
 
 interface BookDetailModalProps {
   book: Book & { partnerUrl?: string } | null;
@@ -13,12 +14,23 @@ interface BookDetailModalProps {
   onOpenDiagnosis: () => void;
 }
 
-export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose, onOpenDiagnosis }) => {
+export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose, onOpenDiagnosis: _onOpenDiagnosis }) => {
   const [isSaved, setIsSaved] = useState<boolean>(false);
+  const [currentBookStatus, setCurrentBookStatus] = useState<'to_read' | 'reading' | 'completed' | 'none'>('none');
+  const [activeGuideStage, setActiveGuideStage] = useState<'before' | 'during' | 'after'>('before');
   const [activeTab, setActiveTab] = useState<'questions' | 'quiz' | 'vocab'>('questions');
   const [aiGuide, setAiGuide] = useState<AIGeneratedGuide | null>(null);
   const [isLoadingAI, setIsLoadingAI] = useState<boolean>(false);
   const [selectedQuizAnswers, setSelectedQuizAnswers] = useState<Record<number, number>>({});
+  const [showQuizModal, setShowQuizModal] = useState<boolean>(false);
+
+  // Helper to normalize status
+  const getNormalizedStatus = (rawStatus: string): 'to_read' | 'reading' | 'completed' => {
+    const s = String(rawStatus).toLowerCase();
+    if (s.includes('complete') || s.includes('완독')) return 'completed';
+    if (s.includes('read') && !s.includes('to')) return 'reading';
+    return 'to_read';
+  };
 
   // 1. Dynamic Check if book is already in My Library (DB or localStorage)
   useEffect(() => {
@@ -26,23 +38,36 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
 
     let isMounted = true;
     setIsSaved(false);
+    setCurrentBookStatus('none');
 
     fetchMyLibraryFromDb().then((userBooks) => {
       if (isMounted && userBooks && userBooks.length > 0) {
-        const exists = userBooks.some(
+        const found = userBooks.find(
           (b) => String(b.book?.id || b.id) === String(book.id) || b.book?.title?.trim() === book.title?.trim()
         );
-        if (exists) {
+        if (found) {
+          const norm = getNormalizedStatus(found.status);
           setIsSaved(true);
+          setCurrentBookStatus(norm);
+
+          // Set default guide stage according to status
+          if (norm === 'to_read') setActiveGuideStage('before');
+          else if (norm === 'reading') setActiveGuideStage('during');
+          else if (norm === 'completed') setActiveGuideStage('after');
           return;
         }
       }
       const guestBooks = getGuestLibraryBooks();
-      const guestExists = guestBooks.some(
+      const guestFound = guestBooks.find(
         (g) => String(g.book?.id || g.id) === String(book.id) || g.book?.title?.trim() === book.title?.trim()
       );
-      if (isMounted) {
-        setIsSaved(guestExists);
+      if (isMounted && guestFound) {
+        const norm = getNormalizedStatus(guestFound.status);
+        setIsSaved(true);
+        setCurrentBookStatus(norm);
+        if (norm === 'to_read') setActiveGuideStage('before');
+        else if (norm === 'reading') setActiveGuideStage('during');
+        else if (norm === 'completed') setActiveGuideStage('after');
       }
     });
 
@@ -125,15 +150,33 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
     setSelectedQuizAnswers((prev) => ({ ...prev, [qIdx]: optIdx }));
   };
 
-  const handleToggleSaveBook = async () => {
-    const nextSaved = !isSaved;
-    setIsSaved(nextSaved);
-    if (nextSaved && book) {
-      const res = await saveOrUpdateLibraryBook(book, 'TO_READ');
-      if (res.success) {
-        alert('🎉 내 서재의 [읽을 책]에 성공적으로 추가되었습니다!');
-        window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'TO_READ' } }));
-      }
+  // Change status from to_read to reading
+  const handleUpdateStatusToReading = async () => {
+    if (!book) return;
+    const res = await updateLibraryBookStatus(book.id, 'reading', 30);
+    if (res.success) {
+      setCurrentBookStatus('reading');
+      setActiveGuideStage('during');
+      alert(`📖 '${book.title}' 도서가 [읽는 중] 탭으로 이동되었습니다!`);
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'reading' } }));
+    } else {
+      alert(`⚠️ 상태 변경 실패: ${res.errorMessage}`);
+    }
+  };
+
+  // Complete Quiz handler
+  const handleQuizCompleteInModal = async (_score: number, exp: number) => {
+    if (!book) return;
+    const res = await updateLibraryBookStatus(book.id, 'completed', 100);
+    if (res.success) {
+      setCurrentBookStatus('completed');
+      setActiveGuideStage('after');
+      setShowQuizModal(false);
+      alert(`🎉 완독 퀴즈 검사 완료! 경험치 +${exp}EXP를 획득하셨습니다!`);
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'completed' } }));
+    } else {
+      alert(`⚠️ 완독 저장 실패: ${res.errorMessage}`);
+      setShowQuizModal(false);
     }
   };
 
@@ -199,9 +242,9 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
 
           <div className="flex items-center gap-2">
             <button
-              onClick={handleToggleSaveBook}
+              onClick={handleToggleLibrary}
               className="p-2 text-cream-card hover:text-white rounded-full hover:bg-forest-light transition-colors"
-              title="내 서재에 담기"
+              title="내 서재에 담기/등록 취소"
             >
               <Heart className={`w-5 h-5 ${isSaved ? 'fill-red-400 text-red-400' : ''}`} />
             </button>
@@ -353,30 +396,57 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
 
                 <div className="grid sm:grid-cols-3 gap-4">
                   {/* Before */}
-                  <div className="p-4 bg-[#FAF5EB] rounded-2xl border border-oak/30 space-y-2">
-                    <span className="text-[10px] font-bold text-forest bg-forest/15 px-2.5 py-0.5 rounded-full inline-block">
-                      1. 읽기 전 (Before)
-                    </span>
+                  <div className={`p-4 rounded-2xl transition-all space-y-2 border-2 ${
+                    activeGuideStage === 'before'
+                      ? 'bg-forest/10 border-forest shadow-md scale-102 ring-2 ring-forest/30'
+                      : 'bg-[#FAF5EB] border-oak/30 opacity-80 hover:opacity-100'
+                  }`}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-forest bg-forest/20 px-2.5 py-0.5 rounded-full inline-block">
+                        1. 읽기 전 (Before)
+                      </span>
+                      {activeGuideStage === 'before' && (
+                        <span className="text-[10px] font-extrabold text-forest animate-pulse">● 현재 단계</span>
+                      )}
+                    </div>
                     <p className="text-xs text-charcoal font-medium leading-relaxed italic">
                       "{aiGuide.dialogueGuide?.before || aiGuide.beforeReading?.[0] || `표지와 제목 "${book.title}"을 보았을 때, 어떤 이야기가 펼쳐질지 생각해보자.`}"
                     </p>
                   </div>
 
                   {/* During */}
-                  <div className="p-4 bg-[#FAF5EB] rounded-2xl border border-oak/30 space-y-2">
-                    <span className="text-[10px] font-bold text-oak-dark bg-oak/20 px-2.5 py-0.5 rounded-full inline-block">
-                      2. 읽는 중 (During)
-                    </span>
+                  <div className={`p-4 rounded-2xl transition-all space-y-2 border-2 ${
+                    activeGuideStage === 'during'
+                      ? 'bg-oak/20 border-oak-dark shadow-md scale-102 ring-2 ring-oak/40'
+                      : 'bg-[#FAF5EB] border-oak/30 opacity-80 hover:opacity-100'
+                  }`}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-oak-dark bg-oak/30 px-2.5 py-0.5 rounded-full inline-block">
+                        2. 읽는 중 (During)
+                      </span>
+                      {activeGuideStage === 'during' && (
+                        <span className="text-[10px] font-extrabold text-oak-dark animate-pulse">● 현재 단계</span>
+                      )}
+                    </div>
                     <p className="text-xs text-charcoal font-medium leading-relaxed italic">
                       "{aiGuide.dialogueGuide?.during || aiGuide.duringReading?.[0] || `주인공이 결정적인 순간에 어떤 선택을 할지 추론해볼까?`}"
                     </p>
                   </div>
 
                   {/* After */}
-                  <div className="p-4 bg-[#FAF5EB] rounded-2xl border border-oak/30 space-y-2">
-                    <span className="text-[10px] font-bold text-charcoal bg-charcoal/10 px-2.5 py-0.5 rounded-full inline-block">
-                      3. 읽은 후 (After)
-                    </span>
+                  <div className={`p-4 rounded-2xl transition-all space-y-2 border-2 ${
+                    activeGuideStage === 'after'
+                      ? 'bg-charcoal/10 border-charcoal shadow-md scale-102 ring-2 ring-charcoal/20'
+                      : 'bg-[#FAF5EB] border-oak/30 opacity-80 hover:opacity-100'
+                  }`}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-charcoal bg-charcoal/20 px-2.5 py-0.5 rounded-full inline-block">
+                        3. 읽은 후 (After)
+                      </span>
+                      {activeGuideStage === 'after' && (
+                        <span className="text-[10px] font-extrabold text-charcoal animate-pulse">● 현재 단계</span>
+                      )}
+                    </div>
                     <p className="text-xs text-charcoal font-medium leading-relaxed italic">
                       "{aiGuide.dialogueGuide?.after || aiGuide.afterReading?.[0] || `책을 다 읽고 난 후 기억에 남는 장면이나 내 생각은 무엇이니?`}"
                     </p>
@@ -486,39 +556,58 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
               <ExternalLink className="w-3.5 h-3.5 text-white/80" />
             </button>
 
-            {/* Right Main Actions */}
-            <div className="w-full sm:w-auto flex items-center gap-2">
-              <button
-                onClick={() => {
-                  onClose();
-                  onOpenDiagnosis();
-                }}
-                className="w-1/2 sm:w-auto px-4 py-2.5 bg-cream-light border border-forest/30 text-forest hover:bg-forest/10 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1"
-              >
-                <span>맞춤 진단 받기</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+            {/* Right Main Actions by Reading Status */}
+            <div className="w-full sm:w-auto flex flex-wrap items-center gap-2">
+              {isSaved ? (
+                <>
+                  {currentBookStatus === 'to_read' && (
+                    <button
+                      onClick={handleUpdateStatusToReading}
+                      className="px-4 py-2.5 bg-forest hover:bg-forest-dark text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <BookOpen className="w-4 h-4 text-oak" />
+                      <span>📖 읽는 중으로 변경</span>
+                    </button>
+                  )}
 
-              <button
-                onClick={handleToggleLibrary}
-                className={`w-1/2 sm:w-auto px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  isSaved
-                    ? 'bg-rose-700 hover:bg-rose-800'
-                    : 'bg-forest hover:bg-forest-dark'
-                }`}
-              >
-                {isSaved ? (
-                  <>
-                    <Trash2 className="w-4 h-4 text-white" />
-                    <span>❌ 내 서재에서 등록 취소</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-oak" />
-                    <span>🔖 내 서재에 읽을 책으로 등록</span>
-                  </>
-                )}
-              </button>
+                  {currentBookStatus === 'reading' && (
+                    <button
+                      onClick={() => setShowQuizModal(true)}
+                      className="px-4 py-2.5 bg-forest hover:bg-forest-dark text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-oak" />
+                      <span>🥳 완독 처리 & 퀴즈 검사 받기</span>
+                    </button>
+                  )}
+
+                  {currentBookStatus === 'completed' && (
+                    <button
+                      onClick={() => setShowQuizModal(true)}
+                      className="px-4 py-2.5 bg-forest hover:bg-forest-dark text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-oak" />
+                      <span>✨ 완독 형성평가 퀴즈 재검사</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={handleToggleLibrary}
+                    className="px-3.5 py-2.5 bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    title="내 서재에서 제거하기"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-white" />
+                    <span>등록 취소</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleToggleLibrary}
+                  className="px-5 py-2.5 bg-forest hover:bg-forest-dark text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-oak" />
+                  <span>🔖 내 서재에 읽을 책으로 등록</span>
+                </button>
+              )}
             </div>
 
           </div>
@@ -530,6 +619,15 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
         </div>
 
       </div>
+
+      {/* Mini Quiz Modal for Completion Verification */}
+      {showQuizModal && book && (
+        <BookQuizModal
+          book={book}
+          onClose={() => setShowQuizModal(false)}
+          onComplete={handleQuizCompleteInModal}
+        />
+      )}
     </div>
   );
 };
