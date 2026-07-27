@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { fetchCuratedBooksFromDb, deleteBookFromDb, checkIsAdmin } from '../../services/supabaseService';
 import type { Book } from '../../types';
-import { Search, Database, Star, Heart, BookOpen, ChevronRight, SlidersHorizontal, Sparkles, AlertTriangle, Trash2, Shield } from 'lucide-react';
+import { Search, Database, Star, Heart, BookOpen, ChevronRight, SlidersHorizontal, Sparkles, Trash2, Shield } from 'lucide-react';
 import { BookCoverImage } from '../common/BookCoverImage';
 
 export const getCoupangSearchLink = (title: string): string => {
@@ -28,7 +28,6 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
   const [selectedLevel, setSelectedLevel] = useState<string>('all');
   const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [dbAlert, setDbAlert] = useState<string | null>(null);
   const [savedBookIds, setSavedBookIds] = useState<Set<string>>(new Set());
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [isRealAdmin, setIsRealAdmin] = useState<boolean>(false);
@@ -99,38 +98,21 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
     }
   };
 
-  // 1. 데이터 Fetch 함수 (my_library 테이블 조회)
+  // 1. 큐레이션 서가 도서 Fetch 함수
   const loadBooks = async () => {
     try {
       setIsLoading(true);
-      setDbAlert(null);
 
-      // 무조건 my_library 전체 도서 가져오기
-      let { data, error } = await supabase
-        .from('my_library')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // fetchCuratedBooksFromDb 우선 활용
+      let data = await fetchCuratedBooksFromDb();
 
-      if (error) {
-        console.warn('my_library order(created_at) Fetch Error, retrying without order:', error);
-        const retry = await supabase.from('my_library').select('*');
-        data = retry.data;
-        error = retry.error;
+      if (!data || data.length === 0) {
+        // Fallback to direct books / my_library table
+        const { data: directData } = await supabase.from('books').select('*');
+        data = directData || [];
       }
 
-      if (error || !data || data.length === 0) {
-        const warnMessage = '[Alert] DB my_library 데이터 0건 불러옴 (RLS 권한 또는 테이블 데이터 확인 필요)';
-        console.warn(warnMessage);
-        setDbAlert(warnMessage);
-
-        // Backup 폴백 시도
-        const fallbackData = await fetchCuratedBooksFromDb();
-        if (fallbackData && fallbackData.length > 0) {
-          setBooks(fallbackData);
-          setIsLoading(false);
-          return;
-        }
-
+      if (!data || data.length === 0) {
         setBooks([]);
         setIsLoading(false);
         return;
@@ -255,19 +237,6 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
             <span>내 아이 맞춤 레벨로 도서 큐레이션받기</span>
           </button>
         </div>
-
-        {/* DB Alert Notice if 0 items or RLS block */}
-        {dbAlert && (
-          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex items-center gap-3 text-amber-900 text-xs font-semibold shadow-sm">
-            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-            <div>
-              <p className="font-bold">{dbAlert}</p>
-              <p className="text-[11px] text-amber-700 mt-0.5">
-                Supabase Dashboard &gt; Table Editor &gt; my_library 테이블의 RLS(Row Level Security) READ/SELECT 정책이 활성화되어 있는지 확인해 주세요.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Library Desk Search Console Box */}
         <div className="bg-cream-light border-2 border-oak/40 rounded-3xl p-6 sm:p-8 shadow-elevated space-y-6">

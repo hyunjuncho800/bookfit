@@ -183,9 +183,11 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     
     if (res.success) {
       await loadLibraryData();
+      setActiveTab(newStatus);
       if (newStatus === 'completed') {
-        setActiveTab('completed');
         alert(`🎉 완독 처리 완료! 경험치 100EXP를 획득했습니다.`);
+      } else if (newStatus === 'reading') {
+        alert(`📖 '${item.book.title}' 도서가 [읽는 중] 탭으로 변경 및 이동되었습니다.`);
       }
       window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
     } else {
