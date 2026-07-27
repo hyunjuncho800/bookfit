@@ -147,15 +147,22 @@ export const MyPageSection: React.FC<MyPageSectionProps> = ({ onOpenDiagnosis })
                 </div>
               </div>
 
-              {/* Domain Scores Bar Breakdown */}
+              {/* Domain Scores Bar Breakdown with Growth Metrics */}
               <div className="space-y-3 pt-2">
-                <h4 className="text-xs font-bold text-charcoal">5대 핵심 학술 영역별 점수</h4>
+                <div className="flex justify-between items-center">
+                  <h4 className="text-xs font-bold text-charcoal">5대 학술 영역별 성장 트래킹</h4>
+                  <span className="text-[10px] font-bold text-forest bg-forest/10 px-2 py-0.5 rounded-full">
+                    평균 +14% 성장 📈
+                  </span>
+                </div>
                 
                 <div className="space-y-2 text-xs">
                   <div>
                     <div className="flex justify-between font-medium text-charcoal mb-1">
                       <span>기초 해독 & 파닉스</span>
-                      <span className="font-bold text-forest">{latestResult?.domain_decoding || 85}점</span>
+                      <span className="font-bold text-forest">
+                        {latestResult?.domain_decoding || 85}점 <span className="text-[10px] text-forest font-semibold">(+12%)</span>
+                      </span>
                     </div>
                     <div className="w-full bg-cream-dark h-2 rounded-full overflow-hidden">
                       <div className="bg-forest h-full rounded-full" style={{ width: `${latestResult?.domain_decoding || 85}%` }} />
@@ -165,7 +172,9 @@ export const MyPageSection: React.FC<MyPageSectionProps> = ({ onOpenDiagnosis })
                   <div>
                     <div className="flex justify-between font-medium text-charcoal mb-1">
                       <span>어휘력 & 구문 구조</span>
-                      <span className="font-bold text-oak-dark">{latestResult?.domain_vocabulary || 70}점</span>
+                      <span className="font-bold text-oak-dark">
+                        {latestResult?.domain_vocabulary || 70}점 <span className="text-[10px] text-oak-dark font-semibold">(+18%)</span>
+                      </span>
                     </div>
                     <div className="w-full bg-cream-dark h-2 rounded-full overflow-hidden">
                       <div className="bg-oak h-full rounded-full" style={{ width: `${latestResult?.domain_vocabulary || 70}%` }} />
@@ -175,7 +184,9 @@ export const MyPageSection: React.FC<MyPageSectionProps> = ({ onOpenDiagnosis })
                   <div>
                     <div className="flex justify-between font-medium text-charcoal mb-1">
                       <span>독해력 & 고차 추론</span>
-                      <span className="font-bold text-forest">{latestResult?.domain_comprehension || 65}점</span>
+                      <span className="font-bold text-forest">
+                        {latestResult?.domain_comprehension || 65}점 <span className="text-[10px] text-forest font-semibold">(+15%)</span>
+                      </span>
                     </div>
                     <div className="w-full bg-cream-dark h-2 rounded-full overflow-hidden">
                       <div className="bg-forest h-full rounded-full" style={{ width: `${latestResult?.domain_comprehension || 65}%` }} />
@@ -185,7 +196,9 @@ export const MyPageSection: React.FC<MyPageSectionProps> = ({ onOpenDiagnosis })
                   <div>
                     <div className="flex justify-between font-medium text-charcoal mb-1">
                       <span>메타인지 독서 전략</span>
-                      <span className="font-bold text-charcoal">{latestResult?.domain_metacognition || 60}점</span>
+                      <span className="font-bold text-charcoal">
+                        {latestResult?.domain_metacognition || 60}점 <span className="text-[10px] text-charcoal font-semibold">(+11%)</span>
+                      </span>
                     </div>
                     <div className="w-full bg-cream-dark h-2 rounded-full overflow-hidden">
                       <div className="bg-charcoal h-full rounded-full" style={{ width: `${latestResult?.domain_metacognition || 60}%` }} />

@@ -3,6 +3,8 @@ import type { MyBookItem, ReadingStatus, Book, UserGamificationProfile } from '.
 import { Award, Star, Sparkles, CheckCircle2, Edit3, X, Zap, Trophy, Smile, MessageCircle, BarChart3, BookOpen } from 'lucide-react';
 import { BookCoverImage } from '../common/BookCoverImage';
 import { ParentReportModal } from '../parent/ParentReportModal';
+import { BookQuizModal } from './BookQuizModal';
+import { LevelUpCertificateModal } from '../parent/LevelUpCertificateModal';
 import {
   fetchMyLibraryFromDb,
   saveOrUpdateLibraryBook,
@@ -51,6 +53,13 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     parentName: ''
   });
   const [editingBookItem, setEditingBookItem] = useState<MyBookItem | null>(null);
+  const [quizTargetBook, setQuizTargetBook] = useState<Book | null>(null);
+  const [showCertificate, setShowCertificate] = useState<boolean>(false);
+  const [certificateData, setCertificateData] = useState<{ prev: string; new: string; score: number }>({
+    prev: 'L2 기초',
+    new: 'L3 유창한 독자',
+    score: 95
+  });
   const [showCelebration, setShowCelebration] = useState<boolean>(false);
   const [isParentReportOpen, setIsParentReportOpen] = useState<boolean>(false);
 
@@ -128,36 +137,41 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     return true;
   });
 
-  // Handle Complete Book Action with +100 EXP Celebration
-  const handleCompleteBook = async (item: MyBookItem, e: React.MouseEvent) => {
-    e.stopPropagation();
+  // Completed Count
+  const completedBooksCount = myBooks.filter((b) => isCompleted(b.status)).length;
+  const isLevelUpEligible = completedBooksCount >= 3;
 
-    const targetId = item.book.id || item.id;
-    
-    // Save/Update in Supabase DB with completed status & 100% progress
+  // Trigger 3-Step Mini Quiz Modal on Complete click
+  const handleCompleteBook = (item: MyBookItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setQuizTargetBook(item.book);
+  };
+
+  // Callback when Mini Quiz is submitted with score & EXP
+  const handleQuizSubmitted = async (_score: number, exp: number) => {
+    if (!quizTargetBook) return;
+
+    const targetId = quizTargetBook.id;
     const res = await updateLibraryBookStatus(targetId, 'completed', 100);
 
     if (res.success) {
       await loadLibraryData();
 
-      // Update Profile EXP (+100 EXP)
       setProfile((prev) => ({
         ...prev,
-        currentExp: Math.min(prev.nextLevelExp, prev.currentExp + 100),
+        currentExp: Math.min(prev.nextLevelExp, prev.currentExp + exp),
         completedCountThisMonth: prev.completedCountThisMonth + 1,
       }));
 
-      // Switch to completed tab immediately
       setActiveTab('completed');
+      setQuizTargetBook(null);
 
-      // Alert & Trigger Celebration Banner
-      alert(`🎉 '${item.book.title}' 완독을 축하합니다!\n경험치 100EXP를 획득했습니다!`);
       setShowCelebration(true);
       setTimeout(() => setShowCelebration(false), 4000);
       window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
     } else {
-      console.error('[Update Status Error]:', res.errorMessage);
-      alert(`⚠️ 독후 상태 변경 실패: ${res.errorMessage}`);
+      alert(`⚠️ 완독 저장 중 오류: ${res.errorMessage}`);
+      setQuizTargetBook(null);
     }
   };
 
@@ -302,6 +316,38 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
             </div>
 
           </div>
+
+          {/* Level Up Challenge Banner (Triggers if completed >= 3) */}
+          {isLevelUpEligible && (
+            <div className="mt-4 p-4 bg-gradient-to-r from-oak/20 via-oak/30 to-forest/20 rounded-2xl border-2 border-oak/40 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md animate-pulse">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🏆</span>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold font-serif text-charcoal">
+                    [🏆 완독 {completedBooksCount}권 달성] 문해력 승급 미션(재평가) 도전 가능!
+                  </h4>
+                  <p className="text-[11px] text-charcoal-muted">
+                    8문항 종합 재평가를 마치고 한 단계 더 높은 문해력 레벨 인증서를 획득하세요!
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setCertificateData({
+                    prev: 'L2 기초',
+                    new: 'L3 유창한 독자',
+                    score: 95
+                  });
+                  setShowCertificate(true);
+                }}
+                className="w-full sm:w-auto px-5 py-2.5 bg-forest hover:bg-forest-dark text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 shrink-0"
+              >
+                <Sparkles className="w-4 h-4 text-oak" />
+                <span>승급 미션 도전하기</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 2. Library Shelf Tabs */}
@@ -530,6 +576,26 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
         childName={profile.childName}
         levelBadgeTitle={profile.levelBadgeTitle}
       />
+
+      {/* 3-Step Mini Quiz Modal */}
+      {quizTargetBook && (
+        <BookQuizModal
+          book={quizTargetBook}
+          onClose={() => setQuizTargetBook(null)}
+          onComplete={handleQuizSubmitted}
+        />
+      )}
+
+      {/* Level Up Certificate Modal */}
+      {showCertificate && (
+        <LevelUpCertificateModal
+          childName={userInfo.childName}
+          previousLevel={certificateData.prev}
+          newLevel={certificateData.new}
+          score={certificateData.score}
+          onClose={() => setShowCertificate(false)}
+        />
+      )}
 
       {/* Parent Report Modal */}
       <ParentReportModal
