@@ -210,7 +210,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                   [줄거리 & 서평 요약]
                 </span>
                 <p className="text-xs sm:text-sm text-charcoal leading-relaxed">
-                  {book.summary}
+                  {book.summary || (book as any).description || `${book.title}은(는) 아동의 어휘 확장과 사고력 향상을 돕는 북핏 맞춤 추천 도서입니다.`}
                 </p>
               </div>
 
@@ -221,7 +221,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                   북핏 연구소 큐레이션 추천 사유
                 </p>
                 <p className="text-xs text-charcoal font-medium italic">
-                  "{book.recommendReason}"
+                  "{book.recommendReason || `${book.title}은(는) ${book.gradeTag || '해당 학년'} 학생의 문해 지수와 독해력 확장을 위해 엄선된 맞춤 추천 도서입니다.`}"
                 </p>
               </div>
 
@@ -382,10 +382,13 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
               <div className="p-5 bg-cream-card rounded-2xl border border-oak/20 space-y-3">
                 <h4 className="text-xs font-bold text-forest uppercase tracking-wider flex items-center gap-1.5">
                   <BookOpen className="w-4 h-4 text-oak" />
-                  이 책의 핵심 어휘 포인트 (Vocabulary Keys)
+                  "{book.title}" 핵심 어휘 리포트 (Vocabulary Keys)
                 </h4>
                 <div className="flex flex-wrap gap-2">
-                  {book.vocabularyPoints.map((word, idx) => (
+                  {((book.vocabularyPoints && book.vocabularyPoints.length > 0)
+                    ? book.vocabularyPoints
+                    : aiGuide?.vocabularyQuiz?.map((q) => q.word) || ['문맥 이해', '교과 어휘', '사고력 확장']
+                  ).map((word, idx) => (
                     <span
                       key={idx}
                       className="text-xs font-bold text-forest bg-forest/10 border border-forest/20 px-3.5 py-1.5 rounded-xl"
