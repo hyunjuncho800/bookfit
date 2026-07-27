@@ -15,8 +15,9 @@ const getGeminiApiKey = (): string => {
   if (typeof import.meta !== 'undefined' && import.meta.env) {
     key = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
   }
-  if (!key && typeof process !== 'undefined' && process.env) {
-    key = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+  if (!key && typeof globalThis !== 'undefined' && (globalThis as any).process?.env) {
+    const procEnv = (globalThis as any).process.env;
+    key = procEnv.NEXT_PUBLIC_GEMINI_API_KEY || procEnv.VITE_GEMINI_API_KEY || '';
   }
   return key.trim();
 };

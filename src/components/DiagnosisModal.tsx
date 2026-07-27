@@ -206,7 +206,7 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({ isOpen, onClose,
                     : 'bg-charcoal-muted/50 cursor-not-allowed'
                 }`}
               >
-                <span>{currentStep === SAMPLE_QUIZZES.length - 1 ? '진단 결과 확인' : '다음 문항'}</span>
+                <span>{currentStep === questions.length - 1 ? '진단 결과 확인' : '다음 문항'}</span>
                 <ArrowRight className="w-4 h-4 text-oak" />
               </button>
             </>

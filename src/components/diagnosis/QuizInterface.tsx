@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { DetailedQuestion } from '../../types';
-import { Clock, ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, BookOpen, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, BookOpen, Sparkles } from 'lucide-react';
 
 interface QuizInterfaceProps {
   questions: DetailedQuestion[];
@@ -11,7 +11,6 @@ interface QuizInterfaceProps {
 export const QuizInterface: React.FC<QuizInterfaceProps> = ({ questions, onComplete, onCancel }) => {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
   // Reset quiz state when component mounts or questions prop updates
   useEffect(() => {
@@ -21,25 +20,6 @@ export const QuizInterface: React.FC<QuizInterfaceProps> = ({ questions, onCompl
 
   const currentQ = questions[currentIndex] || questions[0];
   const progressPercent = Math.round(((currentIndex + 1) / questions.length) * 100);
-
-  // Time Attack Timer Effect
-  useEffect(() => {
-    if (currentQ?.questionType === 'timeattack' && currentQ.timeLimitSeconds) {
-      setTimeLeft(currentQ.timeLimitSeconds);
-      const timer = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev === null || prev <= 1) {
-            clearInterval(timer);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
-    } else {
-      setTimeLeft(null);
-    }
-  }, [currentIndex, currentQ]);
 
   const handleSelectOption = (optionIndex: number) => {
     setUserAnswers((prev) => ({
