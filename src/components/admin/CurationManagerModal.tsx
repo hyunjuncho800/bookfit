@@ -159,8 +159,8 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
       setSavedBookIds((prev) => [...prev, book.id]);
       if (onBookAdded) onBookAdded();
     } else {
-      console.error('[Single Book Insert Error Details]:', result.errorMessage);
-      alert(`⚠️ [도서 DB 등록 실패]\n\n원인: ${result.errorMessage || '알 수 없는 DB 저장 에러가 발생했습니다.'}\n\n(Supabase Table Editor > my_library 컬럼 및 RLS 정책을 확인해 주세요.)`);
+      console.error('[Single Book Insert Error]:', result.errorMessage);
+      alert(`⚠️ ${result.errorMessage || '저장 실패 원인: 알 수 없는 에러가 발생했습니다.'}`);
     }
   };
 
@@ -184,12 +184,12 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
 
     if (result.success) {
       setSavedBookIds((prev) => [...prev, ...selectedBookIds]);
-      const warnNotice = result.errorMessage ? `\n\n[주의사항]\n${result.errorMessage}` : '';
+      const warnNotice = result.errorMessage ? `\n\n[실패 내역 상세]\n${result.errorMessage}` : '';
       alert(`🎉 총 ${result.count}권의 도서가 큐레이션 서가 DB에 성공적으로 저장되었습니다!${warnNotice}`);
       if (onBookAdded) onBookAdded();
     } else {
-      console.error('[Batch Insert Error Details]:', result.errorMessage);
-      alert(`⚠️ [일괄 DB 저장 실패]\n\n상세 로그:\n${result.errorMessage || '알 수 없는 DB 저장 에러가 발생했습니다.'}`);
+      console.error('[Batch Insert Error]:', result.errorMessage);
+      alert(`⚠️ ${result.errorMessage || '저장 실패 원인: 알 수 없는 에러가 발생했습니다.'}`);
     }
   };
 

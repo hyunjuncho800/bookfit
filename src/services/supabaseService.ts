@@ -160,90 +160,89 @@ export async function fetchMyLibraryFromDb(): Promise<MyBookItem[]> {
 }
 
 export async function saveOrUpdateLibraryBook(
-  book: Book | any,
+  item: Book | any,
   status: ReadingStatus = 'wantToRead',
   progressPercent: number = 0,
   oneLineReview?: string,
   rating?: number
-): Promise<{ success: boolean; errorMessage?: string; errorDetails?: any }> {
+): Promise<{ success: boolean; errorMessage?: string; rawError?: any }> {
   try {
-    // 1:1 데이터 매핑 및 Sanitization (알라딘 응답 객체 대응)
-    const bookIdStr = String(book.isbn13 || book.isbn || book.book_id || book.itemId || book.id || Date.now());
-    const titleStr = String(book.title || '제목 없음');
-    const authorStr = String(book.author || '저자 미상');
-    const publisherStr = String(book.publisher || '');
-    const coverUrlStr = String(book.coverImage || book.cover_url || book.cover_image || book.cover || book.fullPathCover || '');
-    const summaryStr = String(book.summary || book.description || '');
-    const gradeTagStr = String(book.gradeTag || book.grade_tag || '전 학년');
-    const lexileLevelStr = String(book.lexileLevel || book.lexile_level || '어휘 L3 (맞춤)');
-    const trackTypeStr = String(book.trackType || book.track_type || 'comfort');
+    const bookId = String(item.isbn13 || item.isbn || item.itemId || item.book_id || item.id || Date.now());
+    const title = String(item.title || '제목 없음');
+    const author = String(item.author || '저자 미상');
+    const coverUrl = String(item.cover || item.coverImage || item.cover_url || item.cover_image || item.fullPathCover || '');
+    const publisher = String(item.publisher || '');
+    const summary = String(item.description || item.summary || '');
+    const gradeTag = String(item.gradeTag || item.grade_tag || '');
+    const lexileLevel = String(item.lexileLevel || item.lexile_level || '');
+    const trackType = String(item.trackType || item.track_type || 'comfort');
 
-    const payload: any = {
-      id: bookIdStr,
-      book_id: bookIdStr,
-      title: titleStr,
-      author: authorStr,
-      publisher: publisherStr,
-      cover_url: coverUrlStr,
-      cover_image: coverUrlStr,
-      summary: summaryStr,
-      grade_tag: gradeTagStr,
-      lexile_level: lexileLevelStr,
-      track_type: trackTypeStr,
+    // 1:1 커스텀 bookPayload (기본값 빈 문자열 설정으로 NOT NULL 및 생략 필드 보호)
+    const bookPayload: any = {
+      id: bookId,
+      book_id: bookId,
+      title: title,
+      author: author,
+      cover_url: coverUrl,
+      cover_image: coverUrl,
+      publisher: publisher,
+      summary: summary,
+      grade_tag: gradeTag,
+      lexile_level: lexileLevel,
+      track_type: trackType,
       status: status,
       progress_percent: progressPercent,
       one_line_review: oneLineReview || '',
-      rating: rating !== undefined ? rating : Number(book.rating) || 5,
+      rating: rating !== undefined ? rating : Number(item.rating) || 5,
       updated_at: new Date().toISOString(),
     };
 
-    // 1차 Upsert 시도: onConflict 'book_id'
+    // 1차 Upsert 시도: my_library 테이블
     let { error } = await supabase
       .from('my_library')
-      .upsert([payload], { onConflict: 'book_id', ignoreDuplicates: false });
+      .upsert([bookPayload]);
 
     if (error) {
-      console.warn('Upsert with onConflict: book_id failed, trying onConflict: id:', error);
-      // 2차 Upsert 시도: onConflict 'id'
-      const { error: idError } = await supabase
+      console.warn('First upsert(full bookPayload) failed, trying minimal payload:', error);
+
+      // 2차 시도: 필수 4대 기본 컬럼 규격 커스텀 Payload
+      const minimalPayload = {
+        book_id: bookId,
+        title: title,
+        author: author,
+        cover_url: coverUrl,
+      };
+
+      const { error: minErr } = await supabase
         .from('my_library')
-        .upsert([payload], { onConflict: 'id', ignoreDuplicates: false });
+        .upsert([minimalPayload]);
 
-      if (idError) {
-        console.warn('Upsert with onConflict: id failed, trying minimal payload:', idError);
-        // 3차 Minimal Payload 시도 (필수 컬럼만)
-        const minimalPayload = {
-          book_id: bookIdStr,
-          title: titleStr,
-          author: authorStr,
-          cover_url: coverUrlStr,
-          updated_at: new Date().toISOString(),
+      if (minErr) {
+        const targetErr = minErr || error;
+        const detailStr = targetErr?.details ? ` (${targetErr.details})` : '';
+        const hintStr = targetErr?.hint ? ` [Hint: ${targetErr.hint}]` : '';
+        const rawMsg = targetErr?.message || JSON.stringify(targetErr);
+        
+        const formattedErrorMsg = `저장 실패 원인: ${rawMsg}${detailStr}${hintStr}`;
+        console.error('[Supabase DB Insert Error]:', formattedErrorMsg, targetErr);
+
+        return {
+          success: false,
+          errorMessage: formattedErrorMsg,
+          rawError: targetErr,
         };
-
-        const { error: minError } = await supabase
-          .from('my_library')
-          .upsert([minimalPayload]);
-
-        if (minError) {
-          const detailMsg = `[DB Error] ${minError.message} (Code: ${minError.code || 'N/A'}, Details: ${minError.details || minError.hint || 'N/A'})`;
-          console.error('Final my_library insert failed:', detailMsg, minError);
-          return {
-            success: false,
-            errorMessage: detailMsg,
-            errorDetails: minError,
-          };
-        }
       }
     }
 
     return { success: true };
   } catch (err: any) {
-    const detailMsg = `[Exception] ${err?.message || String(err)}`;
-    console.error('Error saving library book:', err);
+    const rawMsg = err?.message || JSON.stringify(err);
+    const formattedErrorMsg = `저장 실패 원인: ${rawMsg}`;
+    console.error('[Exception in saveOrUpdateLibraryBook]:', formattedErrorMsg, err);
     return {
       success: false,
-      errorMessage: detailMsg,
-      errorDetails: err,
+      errorMessage: formattedErrorMsg,
+      rawError: err,
     };
   }
 }
