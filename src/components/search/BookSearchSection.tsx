@@ -40,28 +40,27 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
     { id: 'L6', label: 'L6 (심화)' },
   ];
 
-  // 1. 데이터 Fetch 함수 (단순 명료한 구조)
+  // 1. 데이터 Fetch 함수 (my_library 테이블 조회)
   const loadBooks = async () => {
     try {
       setIsLoading(true);
       setDbAlert(null);
 
-      // 무조건 전체 도서 가져오기
+      // 무조건 my_library 전체 도서 가져오기
       let { data, error } = await supabase
-        .from('books') // 실제 테이블명으로 지정
+        .from('my_library')
         .select('*')
-        .order('id', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Supabase Fetch Error:', error);
-        // id 컬럼 순서 정렬 실패 시 기본 조회 재시도
-        const retry = await supabase.from('books').select('*');
+        console.warn('my_library order(created_at) Fetch Error, retrying without order:', error);
+        const retry = await supabase.from('my_library').select('*');
         data = retry.data;
         error = retry.error;
       }
 
       if (error || !data || data.length === 0) {
-        const warnMessage = '[Alert] DB 데이터 0건 불러옴 (RLS 권한 또는 테이블명 확인 필요)';
+        const warnMessage = '[Alert] DB my_library 데이터 0건 불러옴 (RLS 권한 또는 테이블 데이터 확인 필요)';
         console.warn(warnMessage);
         setDbAlert(warnMessage);
 
@@ -83,54 +82,73 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
 
       if (searchTerm && searchTerm.trim() !== '') {
         const term = searchTerm.trim().toLowerCase();
-        result = result.filter((book: any) =>
-          (book.title && String(book.title).toLowerCase().includes(term)) ||
-          (book.author && String(book.author).toLowerCase().includes(term))
-        );
+        result = result.filter((item: any) => {
+          const t = String(item.title || item.book?.title || '').toLowerCase();
+          const a = String(item.author || item.book?.author || '').toLowerCase();
+          return t.includes(term) || a.includes(term);
+        });
       }
 
       if (selectedTag && selectedTag !== '#전체' && selectedTag !== '전체' && selectedTag !== 'all') {
-        result = result.filter((book: any) =>
-          book.theme_keyword === selectedTag ||
-          (book.tags && Array.isArray(book.tags) && book.tags.includes(selectedTag)) ||
-          (book.grade_tag && String(book.grade_tag).includes(selectedTag)) ||
-          (book.gradeTag && String(book.gradeTag).includes(selectedTag))
-        );
+        result = result.filter((item: any) => {
+          const tag = String(
+            item.theme_keyword ||
+            item.grade_tag ||
+            item.gradeTag ||
+            item.book?.gradeTag ||
+            ''
+          );
+          const tagsArr = item.tags || item.book?.tags || [];
+          return (
+            tag === selectedTag ||
+            tag.includes(selectedTag) ||
+            (Array.isArray(tagsArr) && tagsArr.includes(selectedTag))
+          );
+        });
       }
 
       if (selectedLevel && selectedLevel !== '전체 레벨' && selectedLevel !== 'all' && selectedLevel !== '전체') {
-        result = result.filter((book: any) =>
-          book.step_level === selectedLevel ||
-          (book.lexile_level && String(book.lexile_level).includes(selectedLevel)) ||
-          (book.lexileLevel && String(book.lexileLevel).includes(selectedLevel))
-        );
+        result = result.filter((item: any) => {
+          const lvl = String(
+            item.step_level ||
+            item.lexile_level ||
+            item.lexileLevel ||
+            item.book?.lexileLevel ||
+            ''
+          );
+          return lvl === selectedLevel || lvl.includes(selectedLevel);
+        });
       }
 
-      // 화면 표시용 Book 객체 매핑
-      const mappedBooks: Book[] = result.map((item: any) => ({
-        id: String(item.id || item.isbn || Math.random().toString()),
-        title: item.title || '제목 없음',
-        author: item.author || '저자 미상',
-        publisher: item.publisher || '출판사',
-        coverImage:
-          item.cover_image ||
-          item.cover_url ||
-          item.image_url ||
-          item.coverImage ||
-          'https://image.aladin.co.kr/product/572/93/cover500/8949161358_1.jpg',
-        gradeTag: item.grade_tag || item.gradeTag || '전 학년',
-        lexileLevel: item.lexile_level || item.lexileLevel || '어휘 L3 (맞춤)',
-        trackType: (item.track_type || item.trackType || 'comfort') as any,
-        recommendReason: item.recommend_reason || item.recommendReason || '북핏 추천 도서',
-        summary: item.summary || item.description || '어린이 문해력 성장에 도움을 주는 도서입니다.',
-        vocabularyPoints: item.vocabulary_points || item.vocabularyPoints || ['어휘력', '독해력'],
-        parentQuestions: item.parent_questions || item.parentQuestions || ['이 책을 읽고 어떤 느낌이 들었나요?'],
-        rating: Number(item.rating) || 4.9,
-      }));
+      // 화면 표시용 Book 객체 매핑 (my_library 컬럼 완벽 대응)
+      const mappedBooks: Book[] = result.map((item: any) => {
+        const nested = item.book || {};
+        return {
+          id: String(item.id || item.book_id || nested.id || Math.random().toString()),
+          title: item.title || nested.title || '제목 없음',
+          author: item.author || nested.author || '저자 미상',
+          publisher: item.publisher || nested.publisher || '출판사',
+          coverImage:
+            item.cover_url ||
+            item.cover_image ||
+            item.coverImage ||
+            item.image_url ||
+            nested.coverImage ||
+            'https://image.aladin.co.kr/product/572/93/cover500/8949161358_1.jpg',
+          gradeTag: item.grade_tag || item.gradeTag || item.theme_keyword || nested.gradeTag || '전 학년',
+          lexileLevel: item.lexile_level || item.lexileLevel || item.step_level || nested.lexileLevel || '어휘 L3 (맞춤)',
+          trackType: (item.track_type || item.trackType || nested.trackType || 'comfort') as any,
+          recommendReason: item.recommend_reason || item.recommendReason || nested.recommendReason || '북핏 추천 도서',
+          summary: item.summary || item.description || nested.summary || '어린이 문해력 성장에 도움을 주는 도서입니다.',
+          vocabularyPoints: item.vocabulary_points || item.vocabularyPoints || nested.vocabularyPoints || ['어휘력', '독해력'],
+          parentQuestions: item.parent_questions || item.parentQuestions || nested.parentQuestions || ['이 책을 읽고 어떤 느낌이 들었나요?'],
+          rating: Number(item.rating || item.user_rating || nested.rating) || 4.9,
+        };
+      });
 
       setBooks(mappedBooks);
     } catch (err) {
-      console.error('Uncaught error:', err);
+      console.error('Uncaught error loading my_library:', err);
     } finally {
       setIsLoading(false);
     }
@@ -186,7 +204,7 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
             <div>
               <p className="font-bold">{dbAlert}</p>
               <p className="text-[11px] text-amber-700 mt-0.5">
-                Supabase Dashboard &gt; Table Editor &gt; books 테이블의 RLS(Row Level Security) READ 정책이 활성화되어 있는지 확인해 주세요.
+                Supabase Dashboard &gt; Table Editor &gt; my_library 테이블의 RLS(Row Level Security) READ/SELECT 정책이 활성화되어 있는지 확인해 주세요.
               </p>
             </div>
           </div>

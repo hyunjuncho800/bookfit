@@ -174,8 +174,17 @@ export async function saveOrUpdateLibraryBook(
       author: book.author,
       publisher: book.publisher,
       cover_image: book.coverImage,
+      cover_url: book.coverImage,
+      coverImage: book.coverImage,
       grade_tag: book.gradeTag,
+      gradeTag: book.gradeTag,
+      theme_keyword: book.gradeTag,
       lexile_level: book.lexileLevel,
+      lexileLevel: book.lexileLevel,
+      step_level: book.lexileLevel,
+      summary: book.summary,
+      description: book.summary,
+      recommend_reason: book.recommendReason,
       track_type: book.trackType,
       status: status,
       progress_percent: progressPercent,
@@ -190,20 +199,19 @@ export async function saveOrUpdateLibraryBook(
       .upsert(payload, { onConflict: 'id' });
 
     if (error) {
-      console.warn('Upsert snake_case failed, trying fallback:', error);
+      console.warn('Upsert full payload failed, trying fallback without redundant keys:', error);
       const fallbackPayload = {
         id: book.id,
-        bookId: book.id,
+        book_id: book.id,
         title: book.title,
         author: book.author,
         publisher: book.publisher,
-        coverImage: book.coverImage,
+        cover_url: book.coverImage,
+        cover_image: book.coverImage,
         status: status,
-        progressPercent: progressPercent,
-        oneLineReview: oneLineReview || '',
         rating: rating !== undefined ? rating : book.rating || 5,
         book: book,
-        updatedAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       const { error: fallbackError } = await supabase
         .from('my_library')
@@ -325,7 +333,7 @@ export async function removeFromMyLibraryDb(bookId: string): Promise<boolean> {
 /**
  * Helper to sanitize book payload strictly according to Supabase DB column types
  */
-const sanitizeBookPayload = (book: any, defaultTrack: string = 'comfort') => {
+export const sanitizeBookPayload = (book: any, defaultTrack: string = 'comfort') => {
   const track = String(book.trackType || defaultTrack || 'comfort').trim();
   const stepLevelStr = track === 'comfort' ? 'Step 1. 적정' : track === 'challenge' ? 'Step 2. 도전' : 'Step 3. 보완';
   const isbnStr = String(book.isbn13 || book.isbn || book.id || Date.now()).trim();
@@ -356,17 +364,18 @@ const sanitizeBookPayload = (book: any, defaultTrack: string = 'comfort') => {
     level: track,
     step_type: track,
     step_level: stepLevelStr,
-    recommend_reason: String(book.recommendReason || '북핏 큐레이션 추천 도서').trim(),
+    recommend_reason: String(book.recommendReason || '북핏 추천 도서').trim(),
     vocabulary_points: Array.isArray(book.vocabularyPoints) ? book.vocabularyPoints : ['어휘력', '독해력'],
-    parent_questions: Array.isArray(book.parentQuestions) ? book.parentQuestions : ['이 책을 읽고 어떤 느낌이 들었나요?'],
+    parent_questions: Array.isArray(book.parentQuestions) ? book.parentQuestions : ['책의 핵심 내용을 나눠보세요.'],
     rating: Number(book.rating) || 4.9,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
 };
 
+
 /**
- * Curation Bookshelf Database Operations (`books` & `my_library` table)
+ * Curation Bookshelf Database Operations (`my_library` table)
  */
 export async function saveCuratedBookToDb(
   book: Book,
@@ -374,70 +383,23 @@ export async function saveCuratedBookToDb(
 ): Promise<{ success: boolean; errorMessage?: string }> {
   try {
     const trackType = selectedTrack || book.trackType || 'comfort';
-    const payload = sanitizeBookPayload(book, trackType);
 
-    // 1. Always save to my_library (Primary 100% existing catalog table)
-    await saveOrUpdateLibraryBook(
+    // Save to my_library
+    const success = await saveOrUpdateLibraryBook(
       { ...book, trackType },
       'wantToRead'
     );
 
-    // 2. Upsert to public.books table with onConflict: 'isbn' or 'id'
-    let { error } = await supabase
-      .from('books')
-      .upsert(payload, { onConflict: 'id', ignoreDuplicates: true });
-
-    if (error) {
-      // Try secondary upsert with onConflict: 'isbn'
-      const { error: isbnError } = await supabase
-        .from('books')
-        .upsert(payload, { onConflict: 'isbn', ignoreDuplicates: true });
-
-      if (isbnError) {
-        console.warn('Upsert to books table failed (saved in my_library):', isbnError.message);
-        // Table missing or schema error -> Handled gracefully via my_library
-        if (
-          isbnError.message?.includes('could not find the table') ||
-          isbnError.message?.includes('schema cache') ||
-          isbnError.code === 'PGRST205' ||
-          isbnError.code === '42P01'
-        ) {
-          console.info(
-            `💡 [Supabase SQL DDL Query]\nRun the following SQL in Supabase SQL Editor to create public.books table:\n\n` +
-            `CREATE TABLE IF NOT EXISTS public.books (\n` +
-            `    id TEXT PRIMARY KEY,\n` +
-            `    isbn TEXT,\n` +
-            `    title TEXT NOT NULL,\n` +
-            `    author TEXT,\n` +
-            `    publisher TEXT,\n` +
-            `    cover_image TEXT,\n` +
-            `    cover_url TEXT,\n` +
-            `    image_url TEXT,\n` +
-            `    summary TEXT,\n` +
-            `    description TEXT,\n` +
-            `    step_level TEXT,\n` +
-            `    track_type TEXT,\n` +
-            `    level TEXT,\n` +
-            `    grade_tag TEXT,\n` +
-            `    lexile_level TEXT,\n` +
-            `    recommend_reason TEXT,\n` +
-            `    vocabulary_points JSONB,\n` +
-            `    parent_questions JSONB,\n` +
-            `    rating NUMERIC DEFAULT 4.9,\n` +
-            `    created_at TIMESTAMPTZ DEFAULT NOW(),\n` +
-            `    updated_at TIMESTAMPTZ DEFAULT NOW()\n` +
-            `);\n` +
-            `ALTER TABLE public.books ENABLE ROW LEVEL SECURITY;\n` +
-            `CREATE POLICY "Allow public all on books" ON public.books FOR ALL USING (true) WITH CHECK (true);`
-          );
-          return { success: true };
-        }
-      }
+    if (!success) {
+      return {
+        success: false,
+        errorMessage: 'my_library 테이블 저장 실패'
+      };
     }
 
     return { success: true };
   } catch (err: any) {
-    console.error('Error saving curated book to DB:', err);
+    console.error('Error saving curated book to my_library DB:', err);
     return {
       success: false,
       errorMessage: `[Exception] ${err?.message || String(err)}`
@@ -448,90 +410,23 @@ export async function saveCuratedBookToDb(
 export async function fetchCuratedBooksFromDb(): Promise<Book[]> {
   const mergedBooks: Book[] = [];
 
-  // 1. Fetch from `books` table
+  // Fetch from `my_library` table
   try {
-    const { data: booksData } = await supabase
-      .from('books')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    console.log('[Supabase SELECT public.books Data]:', booksData);
-
-    if (booksData && Array.isArray(booksData)) {
-      booksData.forEach((item: any) => {
-        const track = (item.track_type || item.trackType || item.level || item.step_type || 'comfort') as
-          | 'comfort'
-          | 'challenge'
-          | 'supplement';
-
-        mergedBooks.push({
-          id: String(item.id),
-          title: item.title || '제목 없음',
-          author: item.author || '저자 미상',
-          publisher: item.publisher || '출판사',
-          coverImage:
-            item.cover_image ||
-            item.cover_url ||
-            item.image_url ||
-            item.coverImage ||
-            'https://image.aladin.co.kr/product/572/93/cover500/8949161358_1.jpg',
-          gradeTag: item.grade_tag || item.gradeTag || '전 학년',
-          lexileLevel: item.lexile_level || item.lexileLevel || '어휘 L3 (맞춤)',
-          trackType: track,
-          recommendReason: item.recommend_reason || item.recommendReason || '북핏 연구소 큐레이션 추천 도서',
-          summary: item.summary || item.description || '어린이 문해력 성장에 도움을 주는 도서입니다.',
-          vocabularyPoints: item.vocabulary_points || item.vocabularyPoints || ['어휘력', '독해력'],
-          parentQuestions: item.parent_questions || item.parentQuestions || ['이 책을 읽고 어떤 느낌이 들었나요?'],
-          rating: Number(item.rating) || 4.9,
-        });
-      });
-    }
-  } catch (err) {
-    console.warn('Querying public.books table failed:', err);
-  }
-
-  // 2. Fetch from `my_library` table to guarantee 100% data presence
-  try {
-    const { data: libraryData } = await supabase
+    const { data: libraryData, error } = await supabase
       .from('my_library')
       .select('*')
       .order('created_at', { ascending: false });
 
+    if (error) {
+      console.warn('Querying public.my_library with created_at order failed, retrying without order:', error);
+      const retry = await supabase.from('my_library').select('*');
+      if (retry.data) {
+        return parseLibraryDataToBooks(retry.data);
+      }
+    }
+
     if (libraryData && Array.isArray(libraryData)) {
-      libraryData.forEach((item: any) => {
-        const titleTrimmed = (item.title || '').trim().toLowerCase();
-        const isDuplicate = mergedBooks.some(
-          (b) => b.id === String(item.id) || b.title.trim().toLowerCase() === titleTrimmed
-        );
-
-        if (!isDuplicate) {
-          const track = (item.track_type || item.trackType || item.level || 'comfort') as
-            | 'comfort'
-            | 'challenge'
-            | 'supplement';
-
-          mergedBooks.push({
-            id: String(item.id || item.isbn || Math.random().toString()),
-            title: item.title || '제목 없음',
-            author: item.author || '저자 미상',
-            publisher: item.publisher || '출판사',
-            coverImage:
-              item.cover_image ||
-              item.cover_url ||
-              item.image_url ||
-              item.coverImage ||
-              'https://image.aladin.co.kr/product/572/93/cover500/8949161358_1.jpg',
-            gradeTag: item.grade_tag || item.gradeTag || '전 학년',
-            lexileLevel: item.lexile_level || item.lexileLevel || '어휘 L3 (맞춤)',
-            trackType: track,
-            recommendReason: item.recommend_reason || item.recommendReason || '북핏 연구소 큐레이션 추천 도서',
-            summary: item.summary || item.description || '어린이 문해력 성장에 도움을 주는 도서입니다.',
-            vocabularyPoints: item.vocabulary_points || item.vocabularyPoints || ['어휘력', '독해력'],
-            parentQuestions: item.parent_questions || item.parentQuestions || ['이 책을 읽고 어떤 느낌이 들었나요?'],
-            rating: Number(item.rating) || 4.9,
-          });
-        }
-      });
+      return parseLibraryDataToBooks(libraryData);
     }
   } catch (err) {
     console.warn('Querying public.my_library table failed:', err);
@@ -540,8 +435,40 @@ export async function fetchCuratedBooksFromDb(): Promise<Book[]> {
   return mergedBooks;
 }
 
+function parseLibraryDataToBooks(libraryData: any[]): Book[] {
+  return libraryData.map((item: any) => {
+    const nested = item.book || {};
+    const track = (item.track_type || item.trackType || item.level || item.step_type || nested.trackType || 'comfort') as
+      | 'comfort'
+      | 'challenge'
+      | 'supplement';
+
+    return {
+      id: String(item.id || item.book_id || item.isbn || nested.id || Math.random().toString()),
+      title: item.title || nested.title || '제목 없음',
+      author: item.author || nested.author || '저자 미상',
+      publisher: item.publisher || nested.publisher || '출판사',
+      coverImage:
+        item.cover_url ||
+        item.cover_image ||
+        item.image_url ||
+        item.coverImage ||
+        nested.coverImage ||
+        'https://image.aladin.co.kr/product/572/93/cover500/8949161358_1.jpg',
+      gradeTag: item.grade_tag || item.gradeTag || item.theme_keyword || nested.gradeTag || '전 학년',
+      lexileLevel: item.lexile_level || item.lexileLevel || item.step_level || nested.lexileLevel || '어휘 L3 (맞춤)',
+      trackType: track,
+      recommendReason: item.recommend_reason || item.recommendReason || nested.recommendReason || '북핏 연구소 큐레이션 추천 도서',
+      summary: item.summary || item.description || nested.summary || '어린이 문해력 성장에 도움을 주는 도서입니다.',
+      vocabularyPoints: item.vocabulary_points || item.vocabularyPoints || nested.vocabularyPoints || ['어휘력', '독해력'],
+      parentQuestions: item.parent_questions || item.parentQuestions || nested.parentQuestions || ['이 책을 읽고 어떤 느낌이 들었나요?'],
+      rating: Number(item.rating || item.user_rating || nested.rating) || 4.9,
+    };
+  });
+}
+
 /**
- * Batch Insert Curated Books into Supabase `books` DB
+ * Batch Insert Curated Books into Supabase `my_library` DB
  */
 export async function saveBatchCuratedBooksToDb(
   books: Book[],
@@ -552,46 +479,18 @@ export async function saveBatchCuratedBooksToDb(
   }
 
   try {
-    const payloads = books.map((book) => {
-      const trackType = book.trackType || defaultTrack;
-      return sanitizeBookPayload(book, trackType);
-    });
-
-    // 1. Always save to my_library table (Primary 100% existing catalog table)
+    let successCount = 0;
     for (const book of books) {
-      await saveOrUpdateLibraryBook(
+      const ok = await saveOrUpdateLibraryBook(
         { ...book, trackType: book.trackType || defaultTrack },
         'wantToRead'
       );
+      if (ok) successCount++;
     }
 
-    // 2. Upsert to public.books with onConflict: 'id' or 'isbn'
-    const { error } = await supabase
-      .from('books')
-      .upsert(payloads, { onConflict: 'id', ignoreDuplicates: true });
-
-    if (error) {
-      const { error: isbnErr } = await supabase
-        .from('books')
-        .upsert(payloads, { onConflict: 'isbn', ignoreDuplicates: true });
-
-      if (isbnErr) {
-        console.warn('Upsert to books table failed, preserved in my_library:', isbnErr.message);
-        // Table missing -> Handled safely via my_library
-        if (
-          isbnErr.message?.includes('could not find the table') ||
-          isbnErr.message?.includes('schema cache') ||
-          isbnErr.code === 'PGRST205' ||
-          isbnErr.code === '42P01'
-        ) {
-          return { success: true, count: books.length };
-        }
-      }
-    }
-
-    return { success: true, count: books.length };
+    return { success: true, count: successCount };
   } catch (err: any) {
-    console.error('Exception during batch inserting books to DB:', err);
+    console.error('Exception during batch inserting books to my_library DB:', err);
     return {
       success: false,
       count: 0,
