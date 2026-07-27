@@ -657,3 +657,31 @@ export async function checkIsAdmin(): Promise<boolean> {
     return false;
   }
 }
+
+
+
+/**
+ * Fetch Diagnostic Test History for Logged-in User
+ */
+export async function fetchDiagnosticHistoryFromDb(): Promise<any[]> {
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id;
+    if (!userId) return [];
+
+    const { data, error } = await supabase
+      .from('diagnostic_results')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('fetchDiagnosticHistoryFromDb query warning:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.error('fetchDiagnosticHistoryFromDb exception:', err);
+    return [];
+  }
+}

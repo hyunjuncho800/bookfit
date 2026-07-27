@@ -374,6 +374,32 @@ export const DiagnosticReport: React.FC<DiagnosticReportProps> = ({ data, onRest
           </div>
         </div>
 
+        {/* Bottom Main Action Button Section */}
+        <div className="pt-6 border-t border-cream-dark flex flex-col sm:flex-row items-center justify-between gap-4">
+          <button
+            onClick={onRestart}
+            className="w-full sm:w-auto px-5 py-3.5 bg-cream-light border border-oak/40 text-charcoal hover:bg-cream-card font-bold text-xs rounded-2xl transition-colors flex items-center justify-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>새로운 검사 재진행하기</span>
+          </button>
+
+          <button
+            onClick={() => {
+              const el = document.getElementById('tracks') || document.getElementById('bookshelf');
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth' });
+              } else {
+                window.location.hash = '#tracks';
+              }
+            }}
+            className="w-full sm:w-auto px-8 py-4 bg-forest hover:bg-forest-dark text-white font-bold text-sm sm:text-base rounded-2xl shadow-elevated transition-all flex items-center justify-center gap-2.5 group cursor-pointer"
+          >
+            <Sparkles className="w-5 h-5 text-oak group-hover:rotate-12 transition-transform" />
+            <span>✨ 내 아이 맞춤 레벨([{data.gradeLevelName}])로 도서 큐레이션받기</span>
+          </button>
+        </div>
+
       </div>
 
     </div>
