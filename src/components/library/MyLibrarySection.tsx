@@ -81,6 +81,11 @@ const INITIAL_PROFILE: UserGamificationProfile = {
   ]
 };
 
+// Helper status matchers
+const isReading = (status: string) => status === 'reading' || status === 'READING';
+const isWantToRead = (status: string) => status === 'wantToRead' || status === 'TO_READ' || status === 'to_read';
+const isCompleted = (status: string) => status === 'completed' || status === 'COMPLETED';
+
 export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook, onOpenDiagnosis }) => {
   const [activeTab, setActiveTab] = useState<ReadingStatus>('reading');
   const [myBooks, setMyBooks] = useState<MyBookItem[]>(INITIAL_MY_BOOKS);
@@ -89,28 +94,35 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
   const [showCelebration, setShowCelebration] = useState<boolean>(false);
   const [isParentReportOpen, setIsParentReportOpen] = useState<boolean>(false);
 
-  // Load My Library from Supabase DB on mount
+  const loadLibraryData = async () => {
+    const dbBooks = await fetchMyLibraryFromDb();
+    if (dbBooks && dbBooks.length > 0) {
+      setMyBooks(dbBooks);
+    }
+  };
+
+  // Load My Library from Supabase DB on mount & listen to real-time update event
   useEffect(() => {
-    fetchMyLibraryFromDb().then((dbBooks) => {
-      if (dbBooks && dbBooks.length > 0) {
-        setMyBooks(dbBooks);
-      } else {
-        // Seed initial books to DB if empty
-        INITIAL_MY_BOOKS.forEach((item) => {
-          saveOrUpdateLibraryBook(
-            item.book,
-            item.status,
-            item.progressPercent,
-            item.oneLineReview,
-            item.userRating
-          );
-        });
-      }
-    });
+    loadLibraryData();
+
+    const handleLibraryUpdate = () => {
+      console.log('[MyLibrarySection] Real-time library update triggered');
+      loadLibraryData();
+    };
+
+    window.addEventListener('bookfit_library_updated', handleLibraryUpdate);
+    return () => {
+      window.removeEventListener('bookfit_library_updated', handleLibraryUpdate);
+    };
   }, []);
 
-  // Filter books by active status tab
-  const filteredMyBooks = myBooks.filter((item) => item.status === activeTab);
+  // Filter books by active status tab with multi-status compatibility
+  const filteredMyBooks = myBooks.filter((item) => {
+    if (activeTab === 'reading') return isReading(item.status);
+    if (activeTab === 'wantToRead') return isWantToRead(item.status);
+    if (activeTab === 'completed') return isCompleted(item.status);
+    return true;
+  });
 
   // Handle Complete Book Action with Celebration
   const handleCompleteBook = async (item: MyBookItem, e: React.MouseEvent) => {
@@ -276,7 +288,7 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                   : 'bg-cream-light text-charcoal hover:bg-cream-card border border-oak/20'
               }`}
             >
-              📖 읽는 중 ({myBooks.filter((b) => b.status === 'reading').length})
+              📖 읽는 중 ({myBooks.filter((b) => isReading(b.status)).length})
             </button>
             <button
               onClick={() => setActiveTab('wantToRead')}
@@ -286,7 +298,7 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                   : 'bg-cream-light text-charcoal hover:bg-cream-card border border-oak/20'
               }`}
             >
-              📌 읽을 책 ({myBooks.filter((b) => b.status === 'wantToRead').length})
+              📌 읽을 책 ({myBooks.filter((b) => isWantToRead(b.status)).length})
             </button>
             <button
               onClick={() => setActiveTab('completed')}
@@ -296,7 +308,7 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                   : 'bg-cream-light text-charcoal hover:bg-cream-card border border-oak/20'
               }`}
             >
-              🎉 완독한 책 ({myBooks.filter((b) => b.status === 'completed').length})
+              🎉 완독한 책 ({myBooks.filter((b) => isCompleted(b.status)).length})
             </button>
           </div>
 

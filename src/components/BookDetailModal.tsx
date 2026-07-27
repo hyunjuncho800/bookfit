@@ -94,7 +94,26 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
     const nextSaved = !isSaved;
     setIsSaved(nextSaved);
     if (nextSaved && book) {
-      await saveOrUpdateLibraryBook(book, 'wantToRead');
+      const res = await saveOrUpdateLibraryBook(book, 'TO_READ');
+      if (res.success) {
+        alert('🎉 내 서재의 [읽을 책]에 성공적으로 추가되었습니다!');
+        window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'TO_READ' } }));
+      }
+    }
+  };
+
+  const handleRegisterToMyLibrary = async () => {
+    if (!book) return;
+    setIsSaved(true);
+
+    const res = await saveOrUpdateLibraryBook(book, 'TO_READ');
+
+    if (res.success) {
+      alert('🎉 내 서재의 [읽을 책]에 성공적으로 추가되었습니다!');
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'TO_READ' } }));
+    } else {
+      console.error('내 서재 등록 실패:', res.errorMessage);
+      alert(`⚠️ 등록 실패: ${res.errorMessage || 'DB 등록 중 에러가 발생했습니다.'}`);
     }
   };
 
@@ -417,7 +436,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
               </button>
 
               <button
-                onClick={() => setIsSaved(!isSaved)}
+                onClick={handleRegisterToMyLibrary}
                 className={`w-1/2 sm:w-auto px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-2 ${
                   isSaved
                     ? 'bg-oak-dark hover:bg-oak'
