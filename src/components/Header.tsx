@@ -107,25 +107,39 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDiagnosis, onNavigate, onO
               <span>마이 서재</span>
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-forest transition-all duration-200 group-hover:w-full" />
             </button>
+
+            {user && (
+              <button
+                onClick={() => handleNavClick('my-library')}
+                className="text-forest-dark hover:text-forest font-bold text-sm transition-colors py-2 whitespace-nowrap tracking-tight relative group flex items-center gap-1"
+              >
+                <span>마이페이지 📊</span>
+                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-oak transition-all duration-200 group-hover:w-full" />
+              </button>
+            )}
           </nav>
 
           {/* Right Action & Auth Section */}
           <div className="hidden lg:flex items-center gap-3 shrink-0">
             {user ? (
               <div className="flex items-center gap-3 bg-cream-card px-3 py-1.5 rounded-xl border border-oak/30">
-                <span className="text-xs font-bold text-forest flex items-center gap-1.5">
+                <button
+                  onClick={() => handleNavClick('my-library')}
+                  className="text-xs font-bold text-forest hover:text-forest-dark flex items-center gap-1.5 transition-colors"
+                  title="마이페이지 이동"
+                >
                   <User className="w-3.5 h-3.5 text-oak-dark" />
-                  {user.email?.split('@')[0]}님
+                  <span>{user.email?.split('@')[0]} 님</span>
                   {isAdminUser && (
                     <span className="text-[10px] font-extrabold text-amber-900 bg-amber-200 px-2 py-0.5 rounded-md border border-amber-400 shadow-2xs flex items-center gap-0.5">
                       <Shield className="w-3 h-3 fill-amber-500" />
                       관리자
                     </span>
                   )}
-                </span>
+                </button>
                 <button
                   onClick={handleSignOut}
-                  className="text-[11px] font-semibold text-charcoal-muted hover:text-red-600 flex items-center gap-0.5 transition-colors"
+                  className="text-[11px] font-semibold text-charcoal-muted hover:text-red-600 flex items-center gap-0.5 transition-colors border-l border-oak/20 pl-2"
                 >
                   <LogOut className="w-3 h-3" />
                   로그아웃

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import type { MyBookItem, ReadingStatus, Book, UserGamificationProfile } from '../../types';
-import { MOCK_BOOKS } from '../../data/mockData';
 import { Award, Star, Sparkles, CheckCircle2, Edit3, X, Zap, Trophy, Smile, MessageCircle, BarChart3 } from 'lucide-react';
 import { BookCoverImage } from '../common/BookCoverImage';
 import { ParentReportModal } from '../parent/ParentReportModal';
@@ -18,56 +17,7 @@ interface MyLibrarySectionProps {
   onOpenDiagnosis: () => void;
 }
 
-// Initial Mock User Library Items
-const INITIAL_MY_BOOKS: MyBookItem[] = [
-  {
-    id: 'my_1',
-    book: MOCK_BOOKS[0],
-    status: 'completed',
-    progressPercent: 100,
-    userRating: 5,
-    newWordsLearned: ['시치미', '용의주도'],
-    oneLineReview: '만복이가 착한 말을 할 때 찹쌀떡 맛이 느껴지는 것 같았어요!',
-    completedAt: '2026-07-20'
-  },
-  {
-    id: 'my_2',
-    book: MOCK_BOOKS[2],
-    status: 'reading',
-    progressPercent: 60,
-    userRating: 4,
-    newWordsLearned: ['뿌듯하다', '벅차다'],
-    oneLineReview: '내 마음속 기분을 여러 가지 단어로 표현하니까 재밌어요.'
-  },
-  {
-    id: 'my_3',
-    book: MOCK_BOOKS[3],
-    status: 'reading',
-    progressPercent: 40,
-  },
-  {
-    id: 'my_4',
-    book: MOCK_BOOKS[1],
-    status: 'wantToRead',
-    progressPercent: 0,
-  },
-  {
-    id: 'my_5',
-    book: MOCK_BOOKS[5],
-    status: 'wantToRead',
-    progressPercent: 0,
-  },
-  {
-    id: 'my_6',
-    book: MOCK_BOOKS[4],
-    status: 'completed',
-    progressPercent: 100,
-    userRating: 5,
-    newWordsLearned: ['용기', '자존감'],
-    oneLineReview: '어렵지만 부모님과 이야기 나누니까 생각이 넓어졌어요!',
-    completedAt: '2026-07-15'
-  }
-];
+// Initial Mock User Library Items (Unused, initialized to clean empty array for new users)
 
 const INITIAL_PROFILE: UserGamificationProfile = {
   childName: '우리 아이',
@@ -90,8 +40,12 @@ const isCompleted = (status: string) => status === 'completed' || status === 'CO
 
 export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook, onOpenDiagnosis }) => {
   const [activeTab, setActiveTab] = useState<ReadingStatus>('wantToRead');
-  const [myBooks, setMyBooks] = useState<MyBookItem[]>(INITIAL_MY_BOOKS);
-  const [profile, setProfile] = useState<UserGamificationProfile>(INITIAL_PROFILE);
+  const [myBooks, setMyBooks] = useState<MyBookItem[]>([]);
+  const [profile, setProfile] = useState<UserGamificationProfile>({
+    ...INITIAL_PROFILE,
+    currentExp: 0,
+    completedCountThisMonth: 0,
+  });
   const [userInfo, setUserInfo] = useState<{ childName: string; parentName: string }>({
     childName: '우리 아이',
     parentName: ''
@@ -148,9 +102,7 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     }
 
     const merged = Array.from(mergedMap.values());
-    if (merged.length > 0) {
-      setMyBooks(merged);
-    }
+    setMyBooks(merged);
   };
 
   // Load My Library from Supabase DB on mount & listen to real-time update event
@@ -408,9 +360,33 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
 
         {/* 3. Wood Shelf Book Grid */}
         <div className="relative pt-4 pb-8 space-y-12">
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-8">
-            {filteredMyBooks.map((item) => {
+          {filteredMyBooks.length === 0 ? (
+            <div className="py-16 px-6 bg-cream-card rounded-3xl border-2 border-dashed border-oak/30 text-center space-y-4 max-w-lg mx-auto shadow-sm">
+              <div className="w-14 h-14 bg-oak/20 rounded-2xl flex items-center justify-center mx-auto text-forest text-2xl">
+                📚
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold font-serif text-charcoal">
+                  아직 서재에 담긴 책이 없습니다.
+                </h3>
+                <p className="text-xs text-charcoal-muted leading-relaxed">
+                  [3-Step 맞춤 서가]에서 아이의 읽기 파트너 도서를 선택하여 내 서재에 담아보세요!
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const el = document.getElementById('tracks') || document.getElementById('bookshelf');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="px-6 py-2.5 bg-forest hover:bg-forest-dark text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5"
+              >
+                <Sparkles className="w-4 h-4 text-oak" />
+                <span>맞춤 추천 도서 둘러보기</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-8">
+              {filteredMyBooks.map((item) => {
               const book = item.book;
               return (
                 <div
@@ -520,6 +496,7 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
               );
             })}
           </div>
+          )}
 
           {/* Wooden Shelf Bar Visual */}
           <div className="w-full h-4 wood-shelf rounded-xl shadow-md" />
