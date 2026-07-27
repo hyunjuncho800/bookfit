@@ -27,6 +27,17 @@ export interface QuizQuestion {
 
 export type DomainCategory = 'decoding' | 'vocabulary' | 'comprehension' | 'metacognition';
 
+export type AgeGroup = 'preschool' | 'elementary_low' | 'elementary_mid' | 'elementary_high';
+
+export interface AgeGroupOption {
+  id: AgeGroup;
+  title: string;
+  ageText: string;
+  description: string;
+  badge: string;
+  iconName: string;
+}
+
 export interface DomainInfo {
   id: DomainCategory;
   name: string;
@@ -40,7 +51,7 @@ export interface DetailedQuestion {
   id: number;
   domain: DomainCategory;
   domainName: string;
-  questionType: 'timeattack' | 'choice' | 'passage' | 'likert';
+  questionType?: 'timeattack' | 'choice' | 'passage' | 'likert';
   timeLimitSeconds?: number;
   passageTitle?: string;
   passageContent?: string;
@@ -51,6 +62,7 @@ export interface DetailedQuestion {
 }
 
 export interface DiagnosticResultData {
+  ageGroup?: AgeGroup;
   totalScore: number;
   percentileTop: number;
   gradeLevelName: string;

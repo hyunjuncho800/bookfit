@@ -9,11 +9,13 @@ import { MyLibrarySection } from './components/library/MyLibrarySection';
 import { Footer } from './components/Footer';
 import { DiagnosisFlow } from './components/diagnosis/DiagnosisFlow';
 import { BookDetailModal } from './components/BookDetailModal';
+import { AuthModal } from './components/AuthModal';
 import type { Book } from './types';
 
 export function App() {
   const [currentView, setCurrentView] = useState<'landing' | 'diagnosis'>('landing');
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const handleNavigate = (sectionId: string) => {
     if (currentView !== 'landing') {
@@ -34,6 +36,7 @@ export function App() {
       <Header
         onOpenDiagnosis={() => setCurrentView('diagnosis')}
         onNavigate={handleNavigate}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
       />
 
       {/* Conditional View Rendering */}
@@ -84,6 +87,12 @@ export function App() {
         book={selectedBook}
         onClose={() => setSelectedBook(null)}
         onOpenDiagnosis={() => setCurrentView('diagnosis')}
+      />
+
+      {/* Auth Modal for Guest Conversion */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
       />
     </div>
   );

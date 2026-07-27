@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { DIAGNOSTIC_QUESTIONS, DEFAULT_MOCK_RESULT, LITERACY_TEST_QUESTIONS, calculateFinalResults } from '../../data/diagnosticData';
+import { DEFAULT_MOCK_RESULT, LITERACY_TEST_BY_AGE, calculateFinalResults } from '../../data/diagnosticData';
 import { QuizInterface } from './QuizInterface';
 import { DiagnosticReport } from './DiagnosticReport';
-import type { DiagnosticResultData, Book, DomainCategory } from '../../types';
+import { AgeSelectCard } from './AgeSelectCard';
+import type { DiagnosticResultData, Book, DomainCategory, AgeGroup } from '../../types';
 import { saveDiagnosticResultToDb, getLatestDiagnosticResultFromDb } from '../../services/supabaseService';
 import { MOCK_BOOKS } from '../../data/mockData';
 
@@ -12,7 +13,8 @@ interface DiagnosisFlowProps {
 }
 
 export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelectBook }) => {
-  const [currentStep, setCurrentStep] = useState<'quiz' | 'report'>('quiz');
+  const [currentStep, setCurrentStep] = useState<'age_select' | 'quiz' | 'report'>('age_select');
+  const [selectedAge, setSelectedAge] = useState<AgeGroup>('elementary_mid');
   const [reportData, setReportData] = useState<DiagnosticResultData>(DEFAULT_MOCK_RESULT);
 
   useEffect(() => {
@@ -24,11 +26,18 @@ export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelect
     });
   }, []);
 
+  const handleSelectAge = (ageGroup: AgeGroup) => {
+    setSelectedAge(ageGroup);
+    setCurrentStep('quiz');
+  };
+
   const handleQuizComplete = async (answers: Record<number, number>) => {
-    console.log("제출된 답안 리스트 (수신):", answers);
+    console.log(`제출된 답안 리스트 (수신 - 연령: ${selectedAge}):`, answers);
+
+    const questions = LITERACY_TEST_BY_AGE[selectedAge] || LITERACY_TEST_BY_AGE['elementary_mid'];
 
     // 1. 학술 계산 로직 (calculateFinalResults) 실행
-    const calculated = calculateFinalResults(answers);
+    const calculated = calculateFinalResults(answers, selectedAge);
     const totalScore = calculated.totalScore;
     const gradeLevelName = calculated.level;
 
@@ -40,7 +49,7 @@ export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelect
       metacognition: { correct: 0, total: 0 },
     };
 
-    LITERACY_TEST_QUESTIONS.forEach((q) => {
+    questions.forEach((q) => {
       const domain = q.domain || 'vocabulary';
       domainCounts[domain].total += 1;
 
@@ -59,21 +68,21 @@ export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelect
       metacognition: domainCounts.metacognition.total > 0 ? Math.round((domainCounts.metacognition.correct / domainCounts.metacognition.total) * 100) : 0,
     };
 
-    console.log(`[12문항 학술 진단 채점 완료] 맞은 개수: ${calculated.correctCount}/${calculated.totalQuestions}, 계산된 최종 점수: ${totalScore}점, 레벨: ${gradeLevelName}`, domainScores);
+    console.log(`[12문항 연령별 정밀 채점 완료 - ${selectedAge}] 정답: ${calculated.correctCount}/${calculated.totalQuestions}, 점수: ${totalScore}점, 레벨: ${gradeLevelName}`, domainScores);
 
     // 3. Dynamic level & prescription mapping
     let percentileTop = 95;
-    let strengths = ['기초 독서 가능성 보유'];
+    let strengths = ['기초 독서 성장 가능성 보유'];
     let weaknesses = ['해독, 어휘력, 독해추론 및 메타인지 단계별 보완 추천'];
     let actionAdvice = [
-      '북핏 Step 1 적정 도서부터 소리 내어 읽기(음독)를 진행하세요.',
-      '어휘 낱말 카드와 가벼운 독후 질문으로 어휘력을 넓혀주세요.'
+      '북핏 1단계 적정 도서부터 하루 10분 소리 내어 읽기(음독)를 진행하세요.',
+      '어휘 낱말 카드와 가벼운 독후 대화로 어휘력을 넓혀주세요.'
     ];
 
     if (totalScore >= 90) {
       percentileTop = 1;
       strengths = [
-        '5대 국제 프레임워크 기준 12문항 최우수 마스터 달성 (L5 숙련된 독자)',
+        `5대 국제 프레임워크 기준 선택 연령대 12문항 최우수 마스터 달성 (L5 숙련된 독자)`,
         '음운 해독, 어휘의미론, 사실/추론/비판 독해 및 메타인지 모니터링 능력 완벽 보유'
       ];
       weaknesses = ['고난도 비문학(과학/역사/철학) 전문 학술 용어 확장을 위한 훈련 권장'];
@@ -100,6 +109,7 @@ export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelect
 
     const updatedResult: DiagnosticResultData = {
       ...DEFAULT_MOCK_RESULT,
+      ageGroup: selectedAge,
       totalScore,
       percentileTop,
       gradeLevelName,
@@ -116,18 +126,24 @@ export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelect
   };
 
   const handleRestart = () => {
-    setCurrentStep('quiz');
+    setCurrentStep('age_select');
   };
+
+  const currentQuestions = LITERACY_TEST_BY_AGE[selectedAge] || LITERACY_TEST_BY_AGE['elementary_mid'];
 
   return (
     <div className="min-h-screen bg-cream py-6">
-      {currentStep === 'quiz' ? (
+      {currentStep === 'age_select' && (
+        <AgeSelectCard onSelectAge={handleSelectAge} />
+      )}
+      {currentStep === 'quiz' && (
         <QuizInterface
-          questions={DIAGNOSTIC_QUESTIONS}
+          questions={currentQuestions}
           onComplete={handleQuizComplete}
           onCancel={onCancel}
         />
-      ) : (
+      )}
+      {currentStep === 'report' && (
         <DiagnosticReport
           data={reportData}
           onRestart={handleRestart}

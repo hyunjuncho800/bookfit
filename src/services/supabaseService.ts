@@ -1,6 +1,8 @@
 import { supabase } from '../lib/supabaseClient';
 import type { DiagnosticResultData, MyBookItem, ReadingStatus, Book } from '../types';
 
+export { supabase };
+
 /**
  * Diagnostic Results Database Operations
  */

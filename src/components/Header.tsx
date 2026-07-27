@@ -1,13 +1,35 @@
-import React, { useState } from 'react';
-import { BookOpen, Menu, X, Sparkles, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BookOpen, Menu, X, Sparkles, ChevronRight, User, LogOut, LogIn } from 'lucide-react';
+import { supabase } from '../services/supabaseService';
 
 interface HeaderProps {
   onOpenDiagnosis: () => void;
   onNavigate: (sectionId: string) => void;
+  onOpenAuth?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenDiagnosis, onNavigate }) => {
+export const Header: React.FC<HeaderProps> = ({ onOpenDiagnosis, onNavigate, onOpenAuth }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }: { data: any }) => {
+      setUser(data.user);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
 
   const handleNavClick = (id: string) => {
     onNavigate(id);
@@ -41,7 +63,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDiagnosis, onNavigate }) =
             </div>
           </div>
 
-          {/* Desktop Navigation - Clean Unified Text Tabs */}
+          {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center gap-6 xl:gap-8 shrink-0">
             <button
               onClick={() => handleNavClick('features')}
@@ -84,17 +106,45 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDiagnosis, onNavigate }) =
             </button>
           </nav>
 
-          {/* Right Primary Action Button (Single Standout Dark Green CTA) */}
-          <div className="hidden lg:flex items-center shrink-0">
+          {/* Right Action & Auth Section */}
+          <div className="hidden lg:flex items-center gap-3 shrink-0">
+            {user ? (
+              <div className="flex items-center gap-3 bg-cream-card px-3 py-1.5 rounded-xl border border-oak/30">
+                <span className="text-xs font-bold text-forest flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-oak-dark" />
+                  {user.email?.split('@')[0]}님
+                </span>
+                <button
+                  onClick={handleSignOut}
+                  className="text-[11px] font-semibold text-charcoal-muted hover:text-red-600 flex items-center gap-0.5 transition-colors"
+                >
+                  <LogOut className="w-3 h-3" />
+                  로그아웃
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-oak-dark bg-oak/15 px-2.5 py-1 rounded-full border border-oak/30">
+                  게스트 체험 중
+                </span>
+                <button
+                  onClick={onOpenAuth}
+                  className="px-3.5 py-2 text-xs font-bold text-forest hover:bg-forest/10 border border-forest/30 rounded-xl transition-all flex items-center gap-1"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>로그인 / 가입</span>
+                </button>
+              </div>
+            )}
+
             <button
               onClick={onOpenDiagnosis}
-              className="group relative inline-flex items-center justify-center px-5 py-2.5 text-xs lg:text-sm font-bold text-white bg-forest hover:bg-forest-dark rounded-xl shadow-md hover:shadow-lg transition-all duration-200 overflow-hidden whitespace-nowrap shrink-0"
+              className="group relative inline-flex items-center justify-center px-4 py-2.5 text-xs lg:text-sm font-bold text-white bg-forest hover:bg-forest-dark rounded-xl shadow-md hover:shadow-lg transition-all duration-200 overflow-hidden whitespace-nowrap shrink-0"
             >
               <span className="relative z-10 flex items-center gap-2 whitespace-nowrap">
-                <span>무료 문해력 진단 시작하기</span>
+                <span>무료 진단 시작하기</span>
                 <ChevronRight className="w-4 h-4 text-oak group-hover:translate-x-1 transition-transform shrink-0" />
               </span>
-              <div className="absolute inset-0 bg-gradient-to-r from-forest via-forest-light to-forest opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
           </div>
 
