@@ -634,7 +634,7 @@ export async function saveUserProfile(
 }
 
 /**
- * Check if the logged-in user has 'admin' role
+ * Check if the logged-in user has 'admin' role via auth metadata
  */
 export async function checkIsAdmin(): Promise<boolean> {
   try {
@@ -642,24 +642,16 @@ export async function checkIsAdmin(): Promise<boolean> {
     const user = authData?.user;
     if (!user) return false;
 
-    // 1. Check user metadata or app metadata
-    if (user.app_metadata?.role === 'admin' || user.user_metadata?.role === 'admin') {
-      return true;
-    }
+    // 1. Direct user_metadata.role === 'admin' or app_metadata.role === 'admin' check
+    const isMetadataAdmin = user.user_metadata?.role === 'admin' || user.app_metadata?.role === 'admin';
+    if (isMetadataAdmin) return true;
 
-    // 2. Admin email whitelist
+    // 2. Admin email whitelist fallback
     if (user.email && (user.email.includes('admin') || user.email.includes('hyunjuncho800'))) {
       return true;
     }
 
-    // 3. Query profiles table for role
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    return profile?.role === 'admin';
+    return false;
   } catch (e) {
     console.error('Error in checkIsAdmin:', e);
     return false;
