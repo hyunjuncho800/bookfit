@@ -89,7 +89,7 @@ const isWantToRead = (status: string) => status === 'wantToRead' || status === '
 const isCompleted = (status: string) => status === 'completed' || status === 'COMPLETED';
 
 export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook, onOpenDiagnosis }) => {
-  const [activeTab, setActiveTab] = useState<ReadingStatus>('reading');
+  const [activeTab, setActiveTab] = useState<ReadingStatus>('wantToRead');
   const [myBooks, setMyBooks] = useState<MyBookItem[]>(INITIAL_MY_BOOKS);
   const [profile, setProfile] = useState<UserGamificationProfile>(INITIAL_PROFILE);
   const [userInfo, setUserInfo] = useState<{ childName: string; parentName: string }>({
@@ -170,65 +170,62 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
 
   // Filter books by active status tab with multi-status compatibility
   const filteredMyBooks = myBooks.filter((item) => {
-    if (activeTab === 'reading') return isReading(item.status);
     if (activeTab === 'wantToRead') return isWantToRead(item.status);
+    if (activeTab === 'reading') return isReading(item.status);
     if (activeTab === 'completed') return isCompleted(item.status);
     return true;
   });
 
-  // Handle Complete Book Action with Celebration
+  // Handle Complete Book Action with +100 EXP Celebration
   const handleCompleteBook = async (item: MyBookItem, e: React.MouseEvent) => {
     e.stopPropagation();
 
     const targetId = item.book.id || item.id;
     
-    // Save/Update in Supabase DB with await
+    // Save/Update in Supabase DB with completed status & 100% progress
     const res = await updateLibraryBookStatus(targetId, 'completed', 100);
 
     if (res.success) {
-      // Refetch from DB to guarantee persistent state across F5 refreshes
       await loadLibraryData();
 
-      // Update Profile EXP
+      // Update Profile EXP (+100 EXP)
       setProfile((prev) => ({
         ...prev,
-        currentExp: Math.min(prev.nextLevelExp, prev.currentExp + 30),
+        currentExp: Math.min(prev.nextLevelExp, prev.currentExp + 100),
         completedCountThisMonth: prev.completedCountThisMonth + 1,
       }));
 
       // Switch to completed tab immediately
       setActiveTab('completed');
 
-      // Trigger Celebration Banner
+      // Alert & Trigger Celebration Banner
+      alert(`🎉 '${item.book.title}' 완독을 축하합니다!\n경험치 100EXP를 획득했습니다!`);
       setShowCelebration(true);
-      setTimeout(() => setShowCelebration(false), 3500);
+      setTimeout(() => setShowCelebration(false), 4000);
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
     } else {
       console.error('[Update Status Error]:', res.errorMessage);
       alert(`⚠️ 독후 상태 변경 실패: ${res.errorMessage}`);
     }
   };
 
-  // Status Change Handler ('reading' | 'wantToRead' | 'completed')
+  // Status Change Handler ('wantToRead' | 'reading' | 'completed') with DB update
   const handleUpdateStatus = async (item: MyBookItem, newStatus: ReadingStatus) => {
     const targetId = item.book.id || item.id;
-    const res = await updateLibraryBookStatus(targetId, newStatus);
+    const progress = newStatus === 'completed' ? 100 : newStatus === 'reading' ? 50 : 0;
+    const res = await updateLibraryBookStatus(targetId, newStatus, progress);
+    
     if (res.success) {
       await loadLibraryData();
       if (newStatus === 'completed') {
         setActiveTab('completed');
+        alert(`🎉 완독 처리 완료! 경험치 100EXP를 획득했습니다.`);
       }
       window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
     } else {
       alert(`⚠️ 상태 변경 실패: ${res.errorMessage}`);
     }
   };
-
-      {/* Parent Report Modal */}
-      <ParentReportModal
-        isOpen={isParentReportOpen}
-        onClose={() => setIsParentReportOpen(false)}
-        childName={userInfo.childName}
-      />
 
   // Save Review Modal Form & Sync to Supabase
   const handleSaveReview = async (rating: number, review: string, words: string[]) => {
@@ -359,16 +356,6 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-cream-dark pb-4">
           <div className="flex items-center gap-2 text-xs sm:text-sm font-bold">
             <button
-              onClick={() => setActiveTab('reading')}
-              className={`px-4 py-2.5 rounded-xl transition-all ${
-                activeTab === 'reading'
-                  ? 'bg-forest text-white shadow-sm'
-                  : 'bg-cream-light text-charcoal hover:bg-cream-card border border-oak/20'
-              }`}
-            >
-              📖 읽는 중 ({myBooks.filter((b) => isReading(b.status)).length})
-            </button>
-            <button
               onClick={() => setActiveTab('wantToRead')}
               className={`px-4 py-2.5 rounded-xl transition-all ${
                 activeTab === 'wantToRead'
@@ -379,6 +366,16 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
               📌 읽을 책 ({myBooks.filter((b) => isWantToRead(b.status)).length})
             </button>
             <button
+              onClick={() => setActiveTab('reading')}
+              className={`px-4 py-2.5 rounded-xl transition-all ${
+                activeTab === 'reading'
+                  ? 'bg-forest text-white shadow-sm'
+                  : 'bg-cream-light text-charcoal hover:bg-cream-card border border-oak/20'
+              }`}
+            >
+              📖 읽는 중 ({myBooks.filter((b) => isReading(b.status)).length})
+            </button>
+            <button
               onClick={() => setActiveTab('completed')}
               className={`px-4 py-2.5 rounded-xl transition-all ${
                 activeTab === 'completed'
@@ -386,7 +383,7 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                   : 'bg-cream-light text-charcoal hover:bg-cream-card border border-oak/20'
               }`}
             >
-              🎉 완독한 책 ({myBooks.filter((b) => isCompleted(b.status)).length})
+              🥳 완독한 책 ({myBooks.filter((b) => isCompleted(b.status)).length})
             </button>
           </div>
 
