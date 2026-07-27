@@ -160,73 +160,91 @@ export async function fetchMyLibraryFromDb(): Promise<MyBookItem[]> {
 }
 
 export async function saveOrUpdateLibraryBook(
-  book: Book,
-  status: ReadingStatus,
+  book: Book | any,
+  status: ReadingStatus = 'wantToRead',
   progressPercent: number = 0,
   oneLineReview?: string,
   rating?: number
-): Promise<boolean> {
+): Promise<{ success: boolean; errorMessage?: string; errorDetails?: any }> {
   try {
-    const payload = {
-      id: book.id,
-      book_id: book.id,
-      title: book.title,
-      author: book.author,
-      publisher: book.publisher,
-      cover_image: book.coverImage,
-      cover_url: book.coverImage,
-      coverImage: book.coverImage,
-      grade_tag: book.gradeTag,
-      gradeTag: book.gradeTag,
-      theme_keyword: book.gradeTag,
-      lexile_level: book.lexileLevel,
-      lexileLevel: book.lexileLevel,
-      step_level: book.lexileLevel,
-      summary: book.summary,
-      description: book.summary,
-      recommend_reason: book.recommendReason,
-      track_type: book.trackType,
+    // 1:1 데이터 매핑 및 Sanitization (알라딘 응답 객체 대응)
+    const bookIdStr = String(book.isbn13 || book.isbn || book.book_id || book.itemId || book.id || Date.now());
+    const titleStr = String(book.title || '제목 없음');
+    const authorStr = String(book.author || '저자 미상');
+    const publisherStr = String(book.publisher || '');
+    const coverUrlStr = String(book.coverImage || book.cover_url || book.cover_image || book.cover || book.fullPathCover || '');
+    const summaryStr = String(book.summary || book.description || '');
+    const gradeTagStr = String(book.gradeTag || book.grade_tag || '전 학년');
+    const lexileLevelStr = String(book.lexileLevel || book.lexile_level || '어휘 L3 (맞춤)');
+    const trackTypeStr = String(book.trackType || book.track_type || 'comfort');
+
+    const payload: any = {
+      id: bookIdStr,
+      book_id: bookIdStr,
+      title: titleStr,
+      author: authorStr,
+      publisher: publisherStr,
+      cover_url: coverUrlStr,
+      cover_image: coverUrlStr,
+      summary: summaryStr,
+      grade_tag: gradeTagStr,
+      lexile_level: lexileLevelStr,
+      track_type: trackTypeStr,
       status: status,
       progress_percent: progressPercent,
       one_line_review: oneLineReview || '',
-      rating: rating !== undefined ? rating : book.rating || 5,
-      book: book,
+      rating: rating !== undefined ? rating : Number(book.rating) || 5,
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase
+    // 1차 Upsert 시도: onConflict 'book_id'
+    let { error } = await supabase
       .from('my_library')
-      .upsert(payload, { onConflict: 'id' });
+      .upsert([payload], { onConflict: 'book_id', ignoreDuplicates: false });
 
     if (error) {
-      console.warn('Upsert full payload failed, trying fallback without redundant keys:', error);
-      const fallbackPayload = {
-        id: book.id,
-        book_id: book.id,
-        title: book.title,
-        author: book.author,
-        publisher: book.publisher,
-        cover_url: book.coverImage,
-        cover_image: book.coverImage,
-        status: status,
-        rating: rating !== undefined ? rating : book.rating || 5,
-        book: book,
-        updated_at: new Date().toISOString(),
-      };
-      const { error: fallbackError } = await supabase
+      console.warn('Upsert with onConflict: book_id failed, trying onConflict: id:', error);
+      // 2차 Upsert 시도: onConflict 'id'
+      const { error: idError } = await supabase
         .from('my_library')
-        .upsert(fallbackPayload, { onConflict: 'id' });
+        .upsert([payload], { onConflict: 'id', ignoreDuplicates: false });
 
-      if (fallbackError) {
-        console.error('Failed to upsert my_library:', fallbackError);
-        return false;
+      if (idError) {
+        console.warn('Upsert with onConflict: id failed, trying minimal payload:', idError);
+        // 3차 Minimal Payload 시도 (필수 컬럼만)
+        const minimalPayload = {
+          book_id: bookIdStr,
+          title: titleStr,
+          author: authorStr,
+          cover_url: coverUrlStr,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: minError } = await supabase
+          .from('my_library')
+          .upsert([minimalPayload]);
+
+        if (minError) {
+          const detailMsg = `[DB Error] ${minError.message} (Code: ${minError.code || 'N/A'}, Details: ${minError.details || minError.hint || 'N/A'})`;
+          console.error('Final my_library insert failed:', detailMsg, minError);
+          return {
+            success: false,
+            errorMessage: detailMsg,
+            errorDetails: minError,
+          };
+        }
       }
     }
 
-    return true;
-  } catch (err) {
+    return { success: true };
+  } catch (err: any) {
+    const detailMsg = `[Exception] ${err?.message || String(err)}`;
     console.error('Error saving library book:', err);
-    return false;
+    return {
+      success: false,
+      errorMessage: detailMsg,
+      errorDetails: err,
+    };
   }
 }
 
@@ -385,15 +403,15 @@ export async function saveCuratedBookToDb(
     const trackType = selectedTrack || book.trackType || 'comfort';
 
     // Save to my_library
-    const success = await saveOrUpdateLibraryBook(
+    const res = await saveOrUpdateLibraryBook(
       { ...book, trackType },
       'wantToRead'
     );
 
-    if (!success) {
+    if (!res.success) {
       return {
         success: false,
-        errorMessage: 'my_library 테이블 저장 실패'
+        errorMessage: res.errorMessage || 'my_library 테이블 저장 실패'
       };
     }
 
@@ -480,15 +498,33 @@ export async function saveBatchCuratedBooksToDb(
 
   try {
     let successCount = 0;
+    const errorLogs: string[] = [];
+
     for (const book of books) {
-      const ok = await saveOrUpdateLibraryBook(
+      const res = await saveOrUpdateLibraryBook(
         { ...book, trackType: book.trackType || defaultTrack },
         'wantToRead'
       );
-      if (ok) successCount++;
+      if (res.success) {
+        successCount++;
+      } else if (res.errorMessage) {
+        errorLogs.push(`[${book.title}] ${res.errorMessage}`);
+      }
     }
 
-    return { success: true, count: successCount };
+    if (successCount === 0 && errorLogs.length > 0) {
+      return {
+        success: false,
+        count: 0,
+        errorMessage: `총 ${books.length}권 전체 저장 실패:\n` + errorLogs.slice(0, 3).join('\n')
+      };
+    }
+
+    return {
+      success: true,
+      count: successCount,
+      errorMessage: errorLogs.length > 0 ? `일부 도서 저장 실패:\n` + errorLogs.slice(0, 2).join('\n') : undefined
+    };
   } catch (err: any) {
     console.error('Exception during batch inserting books to my_library DB:', err);
     return {
