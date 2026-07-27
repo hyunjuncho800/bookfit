@@ -4,15 +4,13 @@ import { generateBookGuideAI } from '../services/aiGuideGenerator';
 import { saveOrUpdateLibraryBook } from '../services/supabaseService';
 import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, BookmarkCheck, ArrowRight, ShoppingBag, Brain, Loader2 } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
+import { getCoupangSearchLink } from '../utils/linkUtils';
 
 interface BookDetailModalProps {
   book: Book & { partnerUrl?: string } | null;
   onClose: () => void;
   onOpenDiagnosis: () => void;
 }
-
-// Coupang Partners Base URL
-export const BASE_PARTNER_URL = "https://link.coupang.com/a/fFatn3zjDo";
 
 export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose, onOpenDiagnosis }) => {
   const [isSaved, setIsSaved] = useState<boolean>(false);
@@ -77,9 +75,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
     supplement: 'Step 3. 약점 보완 (20%)',
   };
 
-  const targetCoupangUrl =
-    book.partnerUrl ||
-    `${BASE_PARTNER_URL}?q=${encodeURIComponent(book.title)}`;
+  const targetCoupangUrl = book.partnerUrl || getCoupangSearchLink(book.title);
 
   const handleCoupangBuy = (e: React.MouseEvent) => {
     e.preventDefault();

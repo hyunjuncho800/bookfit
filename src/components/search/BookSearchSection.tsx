@@ -6,10 +6,15 @@ import { Search, Database, Star, Heart, BookOpen, ChevronRight, SlidersHorizonta
 import { BookCoverImage } from '../common/BookCoverImage';
 
 export const getCoupangSearchLink = (title: string): string => {
-  if (!title) return 'https://link.coupang.com/a/fFatn3zjDo';
-  const cleanTitle = title.replace(/\[.*?\]|\(.*?\)/g, '').trim();
+  if (!title) return 'https://www.coupang.com';
+
+  const cleanTitle = title
+    .replace(/\[.*?\]|\(.*?\)|<.*?>/g, '')
+    .replace(/[\{\}\[\]\/?.,;:|\)*~`!^\-_+<>@\#$%&\\\=\'\"]/g, ' ')
+    .trim();
+
   const encodedTitle = encodeURIComponent(cleanTitle);
-  return `https://link.coupang.com/a/fFatn3zjDo?q=${encodedTitle}`;
+  return `https://www.coupang.com/np/search?component=&q=${encodedTitle}&channel=user`;
 };
 
 interface BookSearchSectionProps {
