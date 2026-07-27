@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { fetchCuratedBooksFromDb } from '../../services/supabaseService';
+import { fetchCuratedBooksFromDb, deleteBookFromDb } from '../../services/supabaseService';
 import type { Book } from '../../types';
-import { Search, Database, Star, Heart, BookOpen, ChevronRight, SlidersHorizontal, Sparkles, AlertTriangle } from 'lucide-react';
+import { Search, Database, Star, Heart, BookOpen, ChevronRight, SlidersHorizontal, Sparkles, AlertTriangle, Trash2, Shield } from 'lucide-react';
 import { BookCoverImage } from '../common/BookCoverImage';
+
+export const getCoupangSearchLink = (title: string): string => {
+  if (!title) return 'https://link.coupang.com/a/fFatn3zjDo';
+  const cleanTitle = title.replace(/\[.*?\]|\(.*?\)/g, '').trim();
+  const encodedTitle = encodeURIComponent(cleanTitle);
+  return `https://link.coupang.com/a/fFatn3zjDo?q=${encodedTitle}`;
+};
 
 interface BookSearchSectionProps {
   onSelectBook: (book: Book) => void;
@@ -18,6 +25,7 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [dbAlert, setDbAlert] = useState<string | null>(null);
   const [savedBookIds, setSavedBookIds] = useState<Set<string>>(new Set());
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   // Category Tag Presets
   const categoryTags = [
@@ -39,6 +47,32 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
     { id: 'L5', label: 'L5 (추론)' },
     { id: 'L6', label: 'L6 (심화)' },
   ];
+
+  // Admin Delete Handler
+  const handleDeleteBook = async (book: Book, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!isAdmin) {
+      alert('🔒 삭제 권한이 없습니다. 관리자 모드(Admin)를 활성화해 주세요.');
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      `🗑️ [도서 등록 취소]\n\n'${book.title}' 도서를 큐레이션 서가 목록에서 정말 삭제하시겠습니까?`
+    );
+
+    if (!confirmDelete) return;
+
+    const res = await deleteBookFromDb(book.id, isAdmin);
+
+    if (res.success) {
+      alert(`✅ '${book.title}' 도서가 큐레이션 서가에서 삭제되었습니다.`);
+      setBooks((prev) => prev.filter((b) => b.id !== book.id));
+    } else {
+      console.error('[Delete Error]:', res.errorMessage);
+      alert(`⚠️ 도서 삭제 실패: ${res.errorMessage}`);
+    }
+  };
 
   // 1. 데이터 Fetch 함수 (my_library 테이블 조회)
   const loadBooks = async () => {
@@ -281,7 +315,7 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
         </div>
 
         {/* Book Grid Results Header */}
-        <div className="flex items-center justify-between border-b border-cream-dark pb-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-cream-dark pb-3">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold font-serif text-charcoal">
               큐레이션 도서 서가 목록
@@ -291,12 +325,28 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
             </span>
           </div>
 
-          {savedBookIds.size > 0 && (
-            <div className="text-xs font-bold text-oak-dark bg-oak/15 px-3 py-1 rounded-full flex items-center gap-1">
-              <Heart className="w-3.5 h-3.5 fill-oak text-oak-dark" />
-              <span>내 서재 담은 책 {savedBookIds.size}권</span>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {/* Admin Permission Toggle Switch */}
+            <button
+              onClick={() => setIsAdmin(!isAdmin)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                isAdmin
+                  ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm'
+                  : 'bg-cream-light text-charcoal-muted border-oak/20 hover:text-charcoal'
+              }`}
+              title="관리자 권한 토글 (도서 삭제/등록 취소 조작 가능)"
+            >
+              <Shield className={`w-3.5 h-3.5 ${isAdmin ? 'text-amber-700 fill-amber-300' : ''}`} />
+              <span>{isAdmin ? '관리자(Admin) 모드: ON' : '관리자 모드: OFF'}</span>
+            </button>
+
+            {savedBookIds.size > 0 && (
+              <div className="text-xs font-bold text-oak-dark bg-oak/15 px-3 py-1 rounded-full flex items-center gap-1">
+                <Heart className="w-3.5 h-3.5 fill-oak text-oak-dark" />
+                <span>내 서재 담은 책 {savedBookIds.size}권</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Loading Spinner Indicator */}
@@ -373,22 +423,36 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
 
                   </div>
 
-                  {/* Card Bottom CTA */}
+                  {/* Card Bottom CTA Bar */}
                   <div className="mt-4 pt-3 border-t border-cream-dark flex items-center justify-between text-xs font-semibold text-forest">
                     <span className="flex items-center gap-1">
                       <BookOpen className="w-3.5 h-3.5 text-oak" />
                       북핏 가이드
                     </span>
-                    <a
-                      href={`https://link.coupang.com/a/fFatn3zjDo?q=${encodeURIComponent(book.title)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="px-2.5 py-1 bg-[#D62828] hover:bg-[#B71C1C] text-white text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm"
-                      title="쿠팡에서 최저가 구매하기"
-                    >
-                      <span>쿠팡 최저가</span>
-                    </a>
+                    <div className="flex items-center gap-2">
+                      {/* Admin Only Delete/Cancel Registration Button */}
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => handleDeleteBook(book, e)}
+                          className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 shadow-sm"
+                          title="관리자 전용: 서가 도서 삭제"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>등록 취소</span>
+                        </button>
+                      )}
+
+                      <a
+                        href={getCoupangSearchLink(book.title)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="px-2.5 py-1 bg-[#D62828] hover:bg-[#B71C1C] text-white text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                        title={`${book.title} 쿠팡 최저가 검색하기`}
+                      >
+                        <span>쿠팡 최저가</span>
+                      </a>
+                    </div>
                   </div>
 
                 </div>

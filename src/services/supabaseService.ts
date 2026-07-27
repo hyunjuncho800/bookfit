@@ -533,3 +533,52 @@ export async function saveBatchCuratedBooksToDb(
     };
   }
 }
+
+/**
+ * Delete Curated Book from Supabase `my_library` DB (Admin Only)
+ */
+export async function deleteBookFromDb(
+  bookId: string,
+  isAdmin: boolean = true
+): Promise<{ success: boolean; errorMessage?: string }> {
+  // RLS / API 삭제 권한 안전장치: 일반 유저인 경우 실행하지 않고 즉시 차단
+  if (!isAdmin) {
+    return {
+      success: false,
+      errorMessage: '삭제 권한이 없습니다. 관리자(Admin) 권한이 필요합니다.',
+    };
+  }
+
+  try {
+    // 1차: book_id 컬럼으로 삭제 시도
+    let { error } = await supabase
+      .from('my_library')
+      .delete()
+      .eq('book_id', bookId);
+
+    if (error) {
+      console.warn('Delete by book_id failed, trying by id:', error);
+      // 2차: id 컬럼으로 삭제 시도
+      const { error: idError } = await supabase
+        .from('my_library')
+        .delete()
+        .eq('id', bookId);
+
+      if (idError) {
+        const rawMsg = idError.message || error.message || JSON.stringify(idError);
+        return {
+          success: false,
+          errorMessage: `[Supabase Delete Error] ${rawMsg}`,
+        };
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    const rawMsg = err?.message || JSON.stringify(err);
+    return {
+      success: false,
+      errorMessage: `[Exception] ${rawMsg}`,
+    };
+  }
+}
