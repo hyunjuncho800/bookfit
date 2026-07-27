@@ -218,10 +218,10 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
               <div className="p-3 bg-forest/5 rounded-xl border border-forest/15 space-y-1">
                 <p className="text-xs font-bold text-forest flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-oak" />
-                  북핏 연구소 큐레이션 추천 사유
+                  북핏 AI 연구소 큐레이션 추천 사유
                 </p>
                 <p className="text-xs text-charcoal font-medium italic">
-                  "{book.recommendReason || `${book.title}은(는) ${book.gradeTag || '해당 학년'} 학생의 문해 지수와 독해력 확장을 위해 엄선된 맞춤 추천 도서입니다.`}"
+                  "{aiGuide?.recommendReason || book.recommendReason || `${book.title}은(는) ${book.gradeTag || '해당 학년'} 학생의 문해 지수와 독해력 확장을 위해 엄선된 맞춤 추천 도서입니다.`}"
                 </p>
               </div>
 

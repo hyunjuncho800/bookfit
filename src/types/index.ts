@@ -107,4 +107,5 @@ export interface AIGeneratedGuide {
   duringReading: string[];
   afterReading: string[];
   vocabularyQuiz: VocabularyQuizItem[];
+  recommendReason?: string;
 }
