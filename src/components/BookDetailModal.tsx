@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import type { Book, AIGeneratedGuide } from '../types';
 import { generateBookGuide } from '../services/aiGuideGenerator';
-import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb } from '../services/supabaseService';
-import { getGuestLibraryBooks, saveGuestLibraryBook } from '../services/authService';
-import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, BookmarkCheck, ArrowRight, ShoppingBag, Brain, Loader2 } from 'lucide-react';
+import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb } from '../services/supabaseService';
+import { getGuestLibraryBooks, saveGuestLibraryBook, removeGuestLibraryBook } from '../services/authService';
+import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, ArrowRight, ShoppingBag, Brain, Loader2, Trash2 } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
 import { getCoupangSearchLink } from '../utils/linkUtils';
 
@@ -137,31 +137,36 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
     }
   };
 
-  const handleRegisterToMyLibrary = async () => {
+  const handleToggleLibrary = async () => {
     if (!book) return;
 
     if (isSaved) {
-      alert(`📌 '${book.title}' 도서는 이미 내 서재에 등록되어 있습니다.`);
-      return;
-    }
+      // 1. 이미 등록된 도서 ➔ 삭제 (DELETE) 처리
+      await deleteBookFromDb(book.id);
+      removeGuestLibraryBook(book.id);
 
-    const res = await saveOrUpdateLibraryBook(book, 'reading');
-
-    if (res.success) {
-      setIsSaved(true);
-      alert(`🎉 '${book.title}' 도서가 내 서재의 [읽는 중]에 성공적으로 추가되었습니다!`);
-      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'reading' } }));
+      setIsSaved(false);
+      alert(`🗑️ '${book.title}' 도서가 내 서재에서 등록 취소(삭제)되었습니다.`);
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId: book.id, removed: true } }));
     } else {
-      console.warn('DB 등록 실패 fallback, localstorage 보존:', res.errorMessage);
-      saveGuestLibraryBook({
-        id: `guest_${book.id}`,
-        book,
-        status: 'reading',
-        progressPercent: 0
-      });
-      setIsSaved(true);
-      alert(`🔖 '${book.title}' 도서가 내 서재에 등록되었습니다!`);
-      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'reading' } }));
+      // 2. 미등록 도서 ➔ 등록 (INSERT/UPSERT) 처리
+      const res = await saveOrUpdateLibraryBook(book, 'wantToRead');
+
+      if (res.success) {
+        setIsSaved(true);
+        alert(`🎉 '${book.title}' 도서가 내 서재의 [읽을 책] 탭에 성공적으로 등록되었습니다!`);
+        window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'wantToRead' } }));
+      } else {
+        saveGuestLibraryBook({
+          id: `guest_${book.id}`,
+          book,
+          status: 'wantToRead',
+          progressPercent: 0
+        });
+        setIsSaved(true);
+        alert(`🔖 '${book.title}' 도서가 내 서재의 [읽을 책] 탭에 등록되었습니다!`);
+        window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'wantToRead' } }));
+      }
     }
   };
 
@@ -495,22 +500,22 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
               </button>
 
               <button
-                onClick={handleRegisterToMyLibrary}
-                className={`w-1/2 sm:w-auto px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-2 ${
+                onClick={handleToggleLibrary}
+                className={`w-1/2 sm:w-auto px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   isSaved
-                    ? 'bg-oak-dark hover:bg-oak'
+                    ? 'bg-rose-700 hover:bg-rose-800'
                     : 'bg-forest hover:bg-forest-dark'
                 }`}
               >
                 {isSaved ? (
                   <>
-                    <BookmarkCheck className="w-4 h-4 text-white" />
-                    <span>내 서재 등록 완료</span>
+                    <Trash2 className="w-4 h-4 text-white" />
+                    <span>❌ 내 서재에서 등록 취소</span>
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4 text-oak" />
-                    <span>내 서재에 읽을 책으로 등록</span>
+                    <span>🔖 내 서재에 읽을 책으로 등록</span>
                   </>
                 )}
               </button>

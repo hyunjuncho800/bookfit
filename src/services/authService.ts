@@ -64,6 +64,19 @@ export const getGuestLibraryBooks = (): MyBookItem[] => {
 };
 
 /**
+ * 게스트 내 서가 도서 localStorage 삭제
+ */
+export const removeGuestLibraryBook = (bookId: string): void => {
+  try {
+    const current = getGuestLibraryBooks();
+    const filtered = current.filter(b => String(b.book?.id || b.id) !== String(bookId));
+    localStorage.setItem(GUEST_LIBRARY_KEY, JSON.stringify(filtered));
+  } catch (e) {
+    console.error('Failed to remove guest library book:', e);
+  }
+};
+
+/**
  * 게스트 ➔ Supabase DB 자동 이관 (Data Migration)
  */
 export const migrateGuestDataToSupabase = async (userId: string): Promise<boolean> => {
