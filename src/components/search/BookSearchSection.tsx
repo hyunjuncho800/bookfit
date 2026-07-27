@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { fetchCuratedBooksFromDb, deleteBookFromDb } from '../../services/supabaseService';
+import { fetchCuratedBooksFromDb, deleteBookFromDb, checkIsAdmin } from '../../services/supabaseService';
 import type { Book } from '../../types';
 import { Search, Database, Star, Heart, BookOpen, ChevronRight, SlidersHorizontal, Sparkles, AlertTriangle, Trash2, Shield } from 'lucide-react';
 import { BookCoverImage } from '../common/BookCoverImage';
