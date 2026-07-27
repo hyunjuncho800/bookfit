@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { DEFAULT_MOCK_RESULT, LITERACY_TEST_BY_AGE, calculateFinalResults } from '../../data/diagnosticData';
+import { DEFAULT_MOCK_RESULT, LITERACY_TEST_BY_AGE, calculateFinalResults, mapChildGradeToAgeGroup } from '../../data/diagnosticData';
 import { QuizInterface } from './QuizInterface';
 import { DiagnosticReport } from './DiagnosticReport';
 import { AgeSelectCard } from './AgeSelectCard';
 import type { DiagnosticResultData, Book, DomainCategory, AgeGroup } from '../../types';
-import { saveDiagnosticResultToDb, getLatestDiagnosticResultFromDb } from '../../services/supabaseService';
+import { saveDiagnosticResultToDb, getLatestDiagnosticResultFromDb, supabase } from '../../services/supabaseService';
 import { MOCK_BOOKS } from '../../data/mockData';
 
 interface DiagnosisFlowProps {
@@ -18,7 +18,21 @@ export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelect
   const [reportData, setReportData] = useState<DiagnosticResultData>(DEFAULT_MOCK_RESULT);
 
   useEffect(() => {
-    // Attempt to load latest saved report if available
+    // 1. Check logged-in user profile to auto-select age group & enter quiz directly
+    supabase.auth.getUser().then(({ data }) => {
+      const user = data?.user;
+      if (user) {
+        const childGrade = user.user_metadata?.child_grade;
+        if (childGrade) {
+          const autoAgeGroup = mapChildGradeToAgeGroup(childGrade);
+          console.log(`[Auto Age Select] User child_grade "${childGrade}" mapped to age group "${autoAgeGroup}"`);
+          setSelectedAge(autoAgeGroup);
+          setCurrentStep('quiz');
+        }
+      }
+    });
+
+    // 2. Attempt to load latest saved report if available
     getLatestDiagnosticResultFromDb().then((savedResult) => {
       if (savedResult) {
         setReportData(savedResult);
@@ -139,6 +153,8 @@ export const DiagnosisFlow: React.FC<DiagnosisFlowProps> = ({ onCancel, onSelect
       {currentStep === 'quiz' && (
         <QuizInterface
           questions={currentQuestions}
+          selectedAge={selectedAge}
+          onChangeAge={(newAge) => setSelectedAge(newAge)}
           onComplete={handleQuizComplete}
           onCancel={onCancel}
         />

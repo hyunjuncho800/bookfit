@@ -575,6 +575,27 @@ export const LITERACY_TEST_BY_AGE: Record<AgeGroup, LiteracyTestQuestion[]> = {
   elementary_high: LITERACY_TEST_ELEMENTARY_HIGH,
 };
 
+export const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
+  preschool: '학령전 (5~7세)',
+  elementary_low: '초등 저학년 (1~2학년)',
+  elementary_mid: '초등 중학년 (3~4학년)',
+  elementary_high: '초등 고학년 (5~6학년)',
+};
+
+export const mapChildGradeToAgeGroup = (childGrade?: string): AgeGroup => {
+  if (!childGrade) return 'elementary_mid';
+  if (childGrade.includes('학령전') || childGrade.includes('유아') || childGrade.includes('5~7세')) {
+    return 'preschool';
+  }
+  if (childGrade.includes('저학년') || childGrade.includes('1~2학년')) {
+    return 'elementary_low';
+  }
+  if (childGrade.includes('고학년') || childGrade.includes('5~6학년')) {
+    return 'elementary_high';
+  }
+  return 'elementary_mid';
+};
+
 export const LITERACY_TEST_QUESTIONS: LiteracyTestQuestion[] = LITERACY_TEST_ELEMENTARY_MID;
 export const DIAGNOSTIC_QUESTIONS: DetailedQuestion[] = LITERACY_TEST_ELEMENTARY_MID;
 

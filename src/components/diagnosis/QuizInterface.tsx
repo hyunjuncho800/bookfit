@@ -1,14 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import type { DetailedQuestion } from '../../types';
-import { ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, BookOpen, Sparkles } from 'lucide-react';
+import type { DetailedQuestion, AgeGroup } from '../../types';
+import { AGE_GROUP_LABELS } from '../../data/diagnosticData';
+import { ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, BookOpen, Sparkles, SlidersHorizontal } from 'lucide-react';
 
 interface QuizInterfaceProps {
   questions: DetailedQuestion[];
+  selectedAge?: AgeGroup;
+  onChangeAge?: (newAge: AgeGroup) => void;
   onComplete: (userAnswers: Record<number, number>) => void;
   onCancel: () => void;
 }
 
-export const QuizInterface: React.FC<QuizInterfaceProps> = ({ questions, onComplete, onCancel }) => {
+export const QuizInterface: React.FC<QuizInterfaceProps> = ({
+  questions,
+  selectedAge = 'elementary_mid',
+  onChangeAge,
+  onComplete,
+  onCancel
+}) => {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
 
@@ -51,21 +60,42 @@ export const QuizInterface: React.FC<QuizInterfaceProps> = ({ questions, onCompl
       
       {/* Quiz Top Header & Progress Bar */}
       <div className="bg-cream-light border border-oak/30 rounded-2xl p-5 shadow-sm space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold text-white bg-forest px-3 py-1 rounded-full shadow-sm">
-              [학술 기반 정밀 문해력 진단]
+              [학술 기반 정밀 진단]
             </span>
+
+            {/* Age Selection Dropdown for logged-in users & customization */}
+            {onChangeAge && (
+              <div className="relative inline-flex items-center">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-forest absolute left-2.5 z-10 pointer-events-none" />
+                <select
+                  value={selectedAge}
+                  onChange={(e) => onChangeAge(e.target.value as AgeGroup)}
+                  className="pl-7 pr-6 py-1 bg-cream border border-forest/30 focus:border-forest text-xs font-bold text-forest rounded-full outline-none appearance-none cursor-pointer hover:bg-forest/10 transition-colors"
+                >
+                  <option value="preschool">[{AGE_GROUP_LABELS.preschool}] 맞춤 진단</option>
+                  <option value="elementary_low">[{AGE_GROUP_LABELS.elementary_low}] 맞춤 진단</option>
+                  <option value="elementary_mid">[{AGE_GROUP_LABELS.elementary_mid}] 맞춤 진단</option>
+                  <option value="elementary_high">[{AGE_GROUP_LABELS.elementary_high}] 맞춤 진단</option>
+                </select>
+                <span className="text-[10px] text-forest font-bold absolute right-2 pointer-events-none">▾</span>
+              </div>
+            )}
+
             <span className="text-xs font-bold text-forest bg-forest/10 px-3 py-1 rounded-full">
               {(currentQ as any).category || currentQ.domainName}
             </span>
+          </div>
+
+          <div className="flex items-center gap-3">
             <span className="text-xs font-semibold text-charcoal-muted">
               문항 {currentIndex + 1} / {questions.length}
             </span>
-          </div>
-
-          <div className="text-xs font-bold text-oak-dark">
-            진도율 {progressPercent}%
+            <div className="text-xs font-bold text-oak-dark">
+              진도율 {progressPercent}%
+            </div>
           </div>
         </div>
 
