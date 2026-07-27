@@ -31,6 +31,25 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
   const [dbAlert, setDbAlert] = useState<string | null>(null);
   const [savedBookIds, setSavedBookIds] = useState<Set<string>>(new Set());
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isRealAdmin, setIsRealAdmin] = useState<boolean>(false);
+
+  useEffect(() => {
+    checkIsAdmin().then((hasAdmin) => {
+      setIsRealAdmin(hasAdmin);
+      setIsAdmin(hasAdmin);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+      checkIsAdmin().then((hasAdmin) => {
+        setIsRealAdmin(hasAdmin);
+        setIsAdmin(hasAdmin);
+      });
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   // Category Tag Presets
   const categoryTags = [
@@ -332,19 +351,21 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Admin Permission Toggle Switch */}
-            <button
-              onClick={() => setIsAdmin(!isAdmin)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
-                isAdmin
-                  ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm'
-                  : 'bg-cream-light text-charcoal-muted border-oak/20 hover:text-charcoal'
-              }`}
-              title="관리자 권한 토글 (도서 삭제/등록 취소 조작 가능)"
-            >
-              <Shield className={`w-3.5 h-3.5 ${isAdmin ? 'text-amber-700 fill-amber-300' : ''}`} />
-              <span>{isAdmin ? '관리자(Admin) 모드: ON' : '관리자 모드: OFF'}</span>
-            </button>
+            {/* Admin Permission Toggle Switch (Only for real Admin user) */}
+            {isRealAdmin && (
+              <button
+                onClick={() => setIsAdmin(!isAdmin)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                  isAdmin
+                    ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm'
+                    : 'bg-cream-light text-charcoal-muted border-oak/20 hover:text-charcoal'
+                }`}
+                title="관리자 권한 토글 (도서 삭제/등록 취소 조작 가능)"
+              >
+                <Shield className={`w-3.5 h-3.5 ${isAdmin ? 'text-amber-700 fill-amber-300' : ''}`} />
+                <span>{isAdmin ? '⚙️ 관리자 모드: ON' : '⚙️ 관리자: OFF'}</span>
+              </button>
+            )}
 
             {savedBookIds.size > 0 && (
               <div className="text-xs font-bold text-oak-dark bg-oak/15 px-3 py-1 rounded-full flex items-center gap-1">
