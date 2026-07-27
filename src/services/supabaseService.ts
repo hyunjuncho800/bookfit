@@ -169,6 +169,9 @@ export async function saveOrUpdateLibraryBook(
   rating?: number
 ): Promise<{ success: boolean; errorMessage?: string; rawError?: any }> {
   try {
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id;
+
     const bookId = String(item.isbn13 || item.isbn || item.itemId || item.book_id || item.id || Date.now());
     const title = String(item.title || '제목 없음');
     const author = String(item.author || '저자 미상');
@@ -179,9 +182,7 @@ export async function saveOrUpdateLibraryBook(
     const lexileLevel = String(item.lexileLevel || item.lexile_level || '');
     const trackType = String(item.trackType || item.track_type || 'comfort');
 
-    // 1:1 커스텀 bookPayload (기본값 빈 문자열 설정으로 NOT NULL 및 생략 필드 보호)
     const bookPayload: any = {
-      id: bookId,
       book_id: bookId,
       title: title,
       author: author,
@@ -198,52 +199,48 @@ export async function saveOrUpdateLibraryBook(
       rating: rating !== undefined ? rating : Number(item.rating) || 5,
     };
 
-    // 1차 Upsert 시도: my_library 테이블 (book_id 중복 방지 onConflict 지정)
+    if (userId) {
+      bookPayload.user_id = userId;
+    }
+
+    // 1차 Upsert 시도: user_id,book_id 우선
     let { error } = await supabase
       .from('my_library')
-      .upsert([bookPayload], { onConflict: 'book_id' });
+      .upsert([bookPayload], { onConflict: userId ? 'user_id,book_id' : 'book_id' });
 
     if (error) {
-      console.warn('First upsert(full bookPayload) failed, trying minimal payload:', error);
+      console.warn('Primary upsert failed, retrying book_id upsert:', error.message);
 
-      // 2차 시도: 필수 4대 기본 컬럼 규격 커스텀 Payload
-      const minimalPayload = {
-        book_id: bookId,
-        title: title,
-        author: author,
-        cover_url: coverUrl,
-      };
-
-      const { error: minErr } = await supabase
+      // 2차 시도: book_id 단일 upsert
+      const retryUpsert = await supabase
         .from('my_library')
-        .upsert([minimalPayload], { onConflict: 'book_id' });
+        .upsert([bookPayload], { onConflict: 'book_id' });
 
-      if (minErr) {
-        const targetErr = minErr || error;
-        const detailStr = targetErr?.details ? ` (${targetErr.details})` : '';
-        const hintStr = targetErr?.hint ? ` [Hint: ${targetErr.hint}]` : '';
-        const rawMsg = targetErr?.message || JSON.stringify(targetErr);
-        
-        const formattedErrorMsg = `저장 실패 원인: ${rawMsg}${detailStr}${hintStr}`;
-        console.error('[Supabase DB Insert Error]:', formattedErrorMsg, targetErr);
+      if (retryUpsert.error) {
+        console.warn('Secondary upsert failed, retrying direct insert:', retryUpsert.error.message);
 
-        return {
-          success: false,
-          errorMessage: formattedErrorMsg,
-          rawError: targetErr,
-        };
+        // 3차 시도: direct insert
+        const retryInsert = await supabase
+          .from('my_library')
+          .insert([bookPayload]);
+
+        if (retryInsert.error) {
+          console.error('All DB insert/upsert attempts failed:', retryInsert.error.message);
+          return {
+            success: false,
+            errorMessage: `저장 실패 원인: ${retryInsert.error.message}`,
+            rawError: retryInsert.error,
+          };
+        }
       }
     }
 
     return { success: true };
   } catch (err: any) {
-    const rawMsg = err?.message || JSON.stringify(err);
-    const formattedErrorMsg = `저장 실패 원인: ${rawMsg}`;
-    console.error('[Exception in saveOrUpdateLibraryBook]:', formattedErrorMsg, err);
+    console.error('saveOrUpdateLibraryBook exception:', err);
     return {
       success: false,
-      errorMessage: formattedErrorMsg,
-      rawError: err,
+      errorMessage: `[Exception] ${err?.message || String(err)}`,
     };
   }
 }

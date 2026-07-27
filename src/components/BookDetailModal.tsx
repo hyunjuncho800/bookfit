@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import type { Book, AIGeneratedGuide } from '../types';
 import { generateBookGuide } from '../services/aiGuideGenerator';
-import { saveOrUpdateLibraryBook } from '../services/supabaseService';
+import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb } from '../services/supabaseService';
+import { getGuestLibraryBooks, saveGuestLibraryBook } from '../services/authService';
 import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, BookmarkCheck, ArrowRight, ShoppingBag, Brain, Loader2 } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
 import { getCoupangSearchLink } from '../utils/linkUtils';
@@ -19,7 +20,38 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
   const [isLoadingAI, setIsLoadingAI] = useState<boolean>(false);
   const [selectedQuizAnswers, setSelectedQuizAnswers] = useState<Record<number, number>>({});
 
-  // Fetch AI Generated Guide on Book Select
+  // 1. Dynamic Check if book is already in My Library (DB or localStorage)
+  useEffect(() => {
+    if (!book) return;
+
+    let isMounted = true;
+    setIsSaved(false);
+
+    fetchMyLibraryFromDb().then((userBooks) => {
+      if (isMounted && userBooks && userBooks.length > 0) {
+        const exists = userBooks.some(
+          (b) => String(b.book?.id || b.id) === String(book.id) || b.book?.title?.trim() === book.title?.trim()
+        );
+        if (exists) {
+          setIsSaved(true);
+          return;
+        }
+      }
+      const guestBooks = getGuestLibraryBooks();
+      const guestExists = guestBooks.some(
+        (g) => String(g.book?.id || g.id) === String(book.id) || g.book?.title?.trim() === book.title?.trim()
+      );
+      if (isMounted) {
+        setIsSaved(guestExists);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [book]);
+
+  // 2. Fetch AI Generated Guide on Book Select
   useEffect(() => {
     if (!book) return;
 
@@ -107,16 +139,29 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
 
   const handleRegisterToMyLibrary = async () => {
     if (!book) return;
-    setIsSaved(true);
 
-    const res = await saveOrUpdateLibraryBook(book, 'TO_READ');
+    if (isSaved) {
+      alert(`📌 '${book.title}' 도서는 이미 내 서재에 등록되어 있습니다.`);
+      return;
+    }
+
+    const res = await saveOrUpdateLibraryBook(book, 'wantToRead');
 
     if (res.success) {
-      alert('🎉 내 서재의 [읽을 책]에 성공적으로 추가되었습니다!');
-      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'TO_READ' } }));
+      setIsSaved(true);
+      alert(`🎉 '${book.title}' 도서가 내 서재의 [읽을 책]에 성공적으로 추가되었습니다!`);
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'wantToRead' } }));
     } else {
-      console.error('내 서재 등록 실패:', res.errorMessage);
-      alert(`⚠️ 등록 실패: ${res.errorMessage || 'DB 등록 중 에러가 발생했습니다.'}`);
+      console.warn('DB 등록 실패 fallback, localstorage 보존:', res.errorMessage);
+      saveGuestLibraryBook({
+        id: `guest_${book.id}`,
+        book,
+        status: 'wantToRead',
+        progressPercent: 0
+      });
+      setIsSaved(true);
+      alert(`🔖 '${book.title}' 도서가 내 서재에 등록되었습니다!`);
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'wantToRead' } }));
     }
   };
 
