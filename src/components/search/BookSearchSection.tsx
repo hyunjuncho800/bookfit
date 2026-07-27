@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { searchAladinBooks } from '../../services/aladinApi';
+import { supabase } from '../../lib/supabaseClient';
 import { fetchCuratedBooksFromDb } from '../../services/supabaseService';
 import type { Book } from '../../types';
-import { Search, Database, Star, Heart, BookOpen, ChevronRight, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Search, Database, Star, Heart, BookOpen, ChevronRight, SlidersHorizontal, Sparkles, AlertTriangle } from 'lucide-react';
 import { BookCoverImage } from '../common/BookCoverImage';
 
 interface BookSearchSectionProps {
@@ -11,11 +11,12 @@ interface BookSearchSectionProps {
 }
 
 export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBook, onOpenDiagnosis }) => {
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string>('전체');
-  const [selectedLexileLevel, setSelectedLexileLevel] = useState<string>('all');
+  const [selectedLevel, setSelectedLevel] = useState<string>('all');
   const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [dbAlert, setDbAlert] = useState<string | null>(null);
   const [savedBookIds, setSavedBookIds] = useState<Set<string>>(new Set());
 
   // Category Tag Presets
@@ -39,49 +40,106 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
     { id: 'L6', label: 'L6 (심화)' },
   ];
 
-  // Unified Data Fetch & Filter Lifecycle Handler
-  useEffect(() => {
-    const timer = setTimeout(async () => {
+  // 1. 데이터 Fetch 함수 (단순 명료한 구조)
+  const loadBooks = async () => {
+    try {
       setIsLoading(true);
-      let candidateBooks: Book[] = [];
+      setDbAlert(null);
 
-      // 1. Fetch DB books if empty query, or perform keyword search
-      if (!searchQuery || searchQuery.trim() === '') {
-        candidateBooks = await fetchCuratedBooksFromDb();
-      } else {
-        candidateBooks = await searchAladinBooks(searchQuery);
+      // 무조건 전체 도서 가져오기
+      let { data, error } = await supabase
+        .from('books') // 실제 테이블명으로 지정
+        .select('*')
+        .order('id', { ascending: false });
+
+      if (error) {
+        console.error('Supabase Fetch Error:', error);
+        // id 컬럼 순서 정렬 실패 시 기본 조회 재시도
+        const retry = await supabase.from('books').select('*');
+        data = retry.data;
+        error = retry.error;
       }
 
-      // 2. Apply Tag & Lexile Filter (Filter Bypass on '전체' / 'all')
-      const finalBooks = candidateBooks.filter((book) => {
-        const matchTag =
-          !selectedTag ||
-          selectedTag === '전체' ||
-          selectedTag === '#전체' ||
-          selectedTag === 'all' ||
-          book.gradeTag.includes(selectedTag) ||
-          book.recommendReason.includes(selectedTag) ||
-          book.lexileLevel.includes(selectedTag) ||
-          book.summary.includes(selectedTag);
+      if (error || !data || data.length === 0) {
+        const warnMessage = '[Alert] DB 데이터 0건 불러옴 (RLS 권한 또는 테이블명 확인 필요)';
+        console.warn(warnMessage);
+        setDbAlert(warnMessage);
 
-        const matchLexile =
-          !selectedLexileLevel ||
-          selectedLexileLevel === 'all' ||
-          selectedLexileLevel === '전체 레벨' ||
-          selectedLexileLevel === '전체' ||
-          book.lexileLevel.includes(selectedLexileLevel);
+        // Backup 폴백 시도
+        const fallbackData = await fetchCuratedBooksFromDb();
+        if (fallbackData && fallbackData.length > 0) {
+          setBooks(fallbackData);
+          setIsLoading(false);
+          return;
+        }
 
-        return matchTag && matchLexile;
-      });
+        setBooks([]);
+        setIsLoading(false);
+        return;
+      }
 
-      console.log('[Desk Search] 최종 렌더링 도서 개수:', finalBooks.length, finalBooks);
-      console.log('현재 표시할 filteredBooks:', finalBooks.length, finalBooks);
-      setBooks(finalBooks);
+      // 2. 검색어/필터 적용 (검색어나 필터가 있는 경우에만 적용, 없을 때는 data 그대로)
+      let result = data;
+
+      if (searchTerm && searchTerm.trim() !== '') {
+        const term = searchTerm.trim().toLowerCase();
+        result = result.filter((book: any) =>
+          (book.title && String(book.title).toLowerCase().includes(term)) ||
+          (book.author && String(book.author).toLowerCase().includes(term))
+        );
+      }
+
+      if (selectedTag && selectedTag !== '#전체' && selectedTag !== '전체' && selectedTag !== 'all') {
+        result = result.filter((book: any) =>
+          book.theme_keyword === selectedTag ||
+          (book.tags && Array.isArray(book.tags) && book.tags.includes(selectedTag)) ||
+          (book.grade_tag && String(book.grade_tag).includes(selectedTag)) ||
+          (book.gradeTag && String(book.gradeTag).includes(selectedTag))
+        );
+      }
+
+      if (selectedLevel && selectedLevel !== '전체 레벨' && selectedLevel !== 'all' && selectedLevel !== '전체') {
+        result = result.filter((book: any) =>
+          book.step_level === selectedLevel ||
+          (book.lexile_level && String(book.lexile_level).includes(selectedLevel)) ||
+          (book.lexileLevel && String(book.lexileLevel).includes(selectedLevel))
+        );
+      }
+
+      // 화면 표시용 Book 객체 매핑
+      const mappedBooks: Book[] = result.map((item: any) => ({
+        id: String(item.id || item.isbn || Math.random().toString()),
+        title: item.title || '제목 없음',
+        author: item.author || '저자 미상',
+        publisher: item.publisher || '출판사',
+        coverImage:
+          item.cover_image ||
+          item.cover_url ||
+          item.image_url ||
+          item.coverImage ||
+          'https://image.aladin.co.kr/product/572/93/cover500/8949161358_1.jpg',
+        gradeTag: item.grade_tag || item.gradeTag || '전 학년',
+        lexileLevel: item.lexile_level || item.lexileLevel || '어휘 L3 (맞춤)',
+        trackType: (item.track_type || item.trackType || 'comfort') as any,
+        recommendReason: item.recommend_reason || item.recommendReason || '북핏 추천 도서',
+        summary: item.summary || item.description || '어린이 문해력 성장에 도움을 주는 도서입니다.',
+        vocabularyPoints: item.vocabulary_points || item.vocabularyPoints || ['어휘력', '독해력'],
+        parentQuestions: item.parent_questions || item.parentQuestions || ['이 책을 읽고 어떤 느낌이 들었나요?'],
+        rating: Number(item.rating) || 4.9,
+      }));
+
+      setBooks(mappedBooks);
+    } catch (err) {
+      console.error('Uncaught error:', err);
+    } finally {
       setIsLoading(false);
-    }, 200);
+    }
+  };
 
-    return () => clearTimeout(timer);
-  }, [searchQuery, selectedTag, selectedLexileLevel]);
+  // 3. 페이지 마운트 및 검색어/필터 변경 시 자동 실행
+  useEffect(() => {
+    loadBooks();
+  }, [searchTerm, selectedTag, selectedLevel]);
 
   const toggleSaveBook = (bookId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -121,6 +179,19 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
           </button>
         </div>
 
+        {/* DB Alert Notice if 0 items or RLS block */}
+        {dbAlert && (
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex items-center gap-3 text-amber-900 text-xs font-semibold shadow-sm">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <p className="font-bold">{dbAlert}</p>
+              <p className="text-[11px] text-amber-700 mt-0.5">
+                Supabase Dashboard &gt; Table Editor &gt; books 테이블의 RLS(Row Level Security) READ 정책이 활성화되어 있는지 확인해 주세요.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Library Desk Search Console Box */}
         <div className="bg-cream-light border-2 border-oak/40 rounded-3xl p-6 sm:p-8 shadow-elevated space-y-6">
           
@@ -131,13 +202,13 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
             </div>
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="책 제목, 저자, 어휘 키워드(예: 한자어, 미스터리, 속담)를 검색해보세요..."
               className="w-full pl-12 pr-28 py-4 bg-cream border-2 border-oak/30 focus:border-forest rounded-2xl text-sm font-medium text-charcoal placeholder-charcoal-muted focus:outline-none focus:ring-4 focus:ring-forest/10 shadow-inner transition-all"
             />
             <button
-              onClick={() => searchAladinBooks(searchQuery)}
+              onClick={() => loadBooks()}
               className="absolute right-2 top-2 bottom-2 px-5 bg-forest hover:bg-forest-dark text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1"
             >
               <span>검색</span>
@@ -175,9 +246,9 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
               {lexileTabs.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setSelectedLexileLevel(tab.id)}
+                  onClick={() => setSelectedLevel(tab.id)}
                   className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
-                    selectedLexileLevel === tab.id
+                    selectedLevel === tab.id
                       ? 'bg-oak text-forest-dark shadow-sm'
                       : 'bg-cream text-charcoal hover:bg-cream-dark'
                   }`}
@@ -214,7 +285,7 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
         {isLoading && (
           <div className="py-12 text-center text-xs text-charcoal-muted space-y-2">
             <Sparkles className="w-6 h-6 text-oak mx-auto animate-spin" />
-            <p>알라딘 API 데이터를 분석하고 북핏 레벨을 매칭하는 중입니다...</p>
+            <p>Supabase DB 데이터를 조회하고 도서를 정렬하는 중입니다...</p>
           </div>
         )}
 
@@ -313,18 +384,18 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
           <div className="py-16 text-center bg-cream-light rounded-3xl border border-oak/30 p-8 space-y-3">
             <BookOpen className="w-10 h-10 text-oak mx-auto" />
             <h4 className="text-lg font-bold font-serif text-charcoal">
-              {searchQuery ? '검색 조건에 맞는 도서를 찾지 못했습니다.' : '등록된 큐레이션 도서가 없습니다.'}
+              {searchTerm ? '검색 조건에 맞는 도서를 찾지 못했습니다.' : '등록된 큐레이션 도서가 없습니다.'}
             </h4>
             <p className="text-xs text-charcoal-muted">
-              {searchQuery
+              {searchTerm
                 ? "검색어를 변경하거나 카테고리 필터를 '전체'로 재설정해 보세요."
                 : "상단 메뉴의 [도서 큐레이션 관리자]를 통해 알라딘 추천 도서를 서가에 등록해 보세요."}
             </p>
             <button
               onClick={() => {
-                setSearchQuery('');
+                setSearchTerm('');
                 setSelectedTag('전체');
-                setSelectedLexileLevel('all');
+                setSelectedLevel('all');
               }}
               className="mt-2 px-4 py-2 bg-forest text-white text-xs font-bold rounded-xl"
             >
