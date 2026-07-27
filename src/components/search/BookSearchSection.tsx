@@ -67,7 +67,8 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
 
     if (res.success) {
       alert(`✅ '${book.title}' 도서가 큐레이션 서가에서 삭제되었습니다.`);
-      setBooks((prev) => prev.filter((b) => b.id !== book.id));
+      await loadBooks();
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
     } else {
       console.error('[Delete Error]:', res.errorMessage);
       alert(`⚠️ 도서 삭제 실패: ${res.errorMessage}`);

@@ -127,29 +127,42 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
   // Handle Complete Book Action with Celebration
   const handleCompleteBook = async (item: MyBookItem, e: React.MouseEvent) => {
     e.stopPropagation();
+
+    const targetId = item.book.id || item.id;
     
-    // Optimistic UI Update
-    setMyBooks((prev) =>
-      prev.map((b) =>
-        b.id === item.id
-          ? { ...b, status: 'completed', progressPercent: 100, completedAt: new Date().toISOString().split('T')[0] }
-          : b
-      )
-    );
+    // Save/Update in Supabase DB with await
+    const res = await updateLibraryBookStatus(targetId, 'completed', 100);
 
-    // Save/Update in Supabase DB
-    await updateLibraryBookStatus(item.book.id || item.id, 'completed', 100);
+    if (res.success) {
+      // Refetch from DB to guarantee persistent state across F5 refreshes
+      await loadLibraryData();
 
-    // Update Profile EXP
-    setProfile((prev) => ({
-      ...prev,
-      currentExp: Math.min(prev.nextLevelExp, prev.currentExp + 30),
-      completedCountThisMonth: prev.completedCountThisMonth + 1,
-    }));
+      // Update Profile EXP
+      setProfile((prev) => ({
+        ...prev,
+        currentExp: Math.min(prev.nextLevelExp, prev.currentExp + 30),
+        completedCountThisMonth: prev.completedCountThisMonth + 1,
+      }));
 
-    // Trigger Celebration Banner
-    setShowCelebration(true);
-    setTimeout(() => setShowCelebration(false), 3500);
+      // Trigger Celebration Banner
+      setShowCelebration(true);
+      setTimeout(() => setShowCelebration(false), 3500);
+    } else {
+      console.error('[Update Status Error]:', res.errorMessage);
+      alert(`⚠️ 독후 상태 변경 실패: ${res.errorMessage}`);
+    }
+  };
+
+  // Status Change Handler ('reading' | 'wantToRead' | 'completed')
+  const handleUpdateStatus = async (item: MyBookItem, newStatus: ReadingStatus) => {
+    const targetId = item.book.id || item.id;
+    const res = await updateLibraryBookStatus(targetId, newStatus);
+    if (res.success) {
+      await loadLibraryData();
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
+    } else {
+      alert(`⚠️ 상태 변경 실패: ${res.errorMessage}`);
+    }
   };
 
   // Save Review Modal Form & Sync to Supabase
@@ -345,30 +358,23 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                 >
                   <div className="space-y-4">
                     
-                    {/* Top Status Badge */}
+                    {/* Top Status Badge & Status Selector */}
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-oak-dark bg-oak/15 px-2.5 py-0.5 rounded">
                         {book.lexileLevel}
                       </span>
 
-                      {item.status === 'completed' && (
-                        <span className="text-[10px] font-bold text-forest bg-forest/15 px-2.5 py-0.5 rounded flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-forest" />
-                          완독 100%
-                        </span>
-                      )}
-
-                      {item.status === 'reading' && (
-                        <span className="text-[10px] font-bold text-oak-dark bg-oak/20 px-2.5 py-0.5 rounded">
-                          읽는 중 ({item.progressPercent}%)
-                        </span>
-                      )}
-
-                      {item.status === 'wantToRead' && (
-                        <span className="text-[10px] font-bold text-charcoal-muted bg-cream-dark px-2.5 py-0.5 rounded">
-                          읽을 책
-                        </span>
-                      )}
+                      <select
+                        value={item.status}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => handleUpdateStatus(item, e.target.value as ReadingStatus)}
+                        className="text-[10px] font-bold text-forest bg-cream-dark border border-oak/30 px-2 py-0.5 rounded cursor-pointer outline-none focus:ring-1 focus:ring-forest"
+                        title="독후 상태 변경하기"
+                      >
+                        <option value="reading">📖 읽는 중</option>
+                        <option value="wantToRead">📌 읽을 책</option>
+                        <option value="completed">🎉 완독 완료</option>
+                      </select>
                     </div>
 
                     {/* Book Cover Image & Meta */}

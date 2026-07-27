@@ -56,7 +56,8 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
 
     if (res.success) {
       alert(`✅ '${book.title}' 도서가 서가에서 삭제되었습니다.`);
-      setDbBooks((prev) => prev.filter((b) => b.id !== book.id));
+      loadBookshelfData();
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
     } else {
       console.error('[Delete Error]:', res.errorMessage);
       alert(`⚠️ 삭제 실패: ${res.errorMessage}`);

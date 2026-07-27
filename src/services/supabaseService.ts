@@ -288,9 +288,9 @@ export async function updateLibraryBookReviewAndRating(
 
 export async function updateLibraryBookStatus(
   bookId: string,
-  status: ReadingStatus,
+  status: ReadingStatus | string,
   progressPercent?: number
-): Promise<boolean> {
+): Promise<{ success: boolean; errorMessage?: string }> {
   try {
     const updateData: any = {
       status,
@@ -299,33 +299,45 @@ export async function updateLibraryBookStatus(
     if (progressPercent !== undefined) {
       updateData.progress_percent = progressPercent;
     }
-    if (status === 'completed') {
+    if (status === 'completed' || status === 'COMPLETED') {
       updateData.progress_percent = 100;
       updateData.completed_at = new Date().toISOString();
     }
 
-    const { error } = await supabase
+    // 1차: book_id 및 id 이중 or 조건으로 비동기(await) Update 전송
+    let { error } = await supabase
       .from('my_library')
       .update(updateData)
-      .eq('id', bookId);
+      .or(`book_id.eq.${bookId},id.eq.${bookId}`);
 
     if (error) {
-      const fallbackData: any = {
-        status,
-        updatedAt: new Date().toISOString(),
-      };
-      if (progressPercent !== undefined) fallbackData.progressPercent = progressPercent;
-      if (status === 'completed') {
-        fallbackData.progressPercent = 100;
-        fallbackData.completedAt = new Date().toISOString();
+      console.warn('Update with or() failed, trying individual eq():', error);
+
+      // 2차: book_id 개별 Update
+      const { error: errBookId } = await supabase
+        .from('my_library')
+        .update(updateData)
+        .eq('book_id', bookId);
+
+      if (errBookId) {
+        // 3차: id 개별 Update
+        const { error: errId } = await supabase
+          .from('my_library')
+          .update(updateData)
+          .eq('id', bookId);
+
+        if (errId) {
+          const rawMsg = errId.message || errBookId.message || error.message;
+          console.error('Failed to update my_library status:', rawMsg);
+          return { success: false, errorMessage: `[DB Update Error] ${rawMsg}` };
+        }
       }
-      await supabase.from('my_library').update(fallbackData).eq('id', bookId);
     }
 
-    return true;
-  } catch (err) {
-    console.error('Error updating book status:', err);
-    return false;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Exception in updateLibraryBookStatus:', err);
+    return { success: false, errorMessage: `[Exception] ${err?.message || String(err)}` };
   }
 }
 
@@ -550,26 +562,33 @@ export async function deleteBookFromDb(
   }
 
   try {
-    // 1차: book_id 컬럼으로 삭제 시도
+    // 1차: book_id 및 id 이중 or 조건으로 비동기(await) Delete 전송
     let { error } = await supabase
       .from('my_library')
       .delete()
-      .eq('book_id', bookId);
+      .or(`book_id.eq.${bookId},id.eq.${bookId}`);
 
     if (error) {
-      console.warn('Delete by book_id failed, trying by id:', error);
-      // 2차: id 컬럼으로 삭제 시도
-      const { error: idError } = await supabase
+      console.warn('Delete with or() failed, trying individual eq():', error);
+
+      // 2차: book_id 개별 Delete
+      const { error: errBookId } = await supabase
         .from('my_library')
         .delete()
-        .eq('id', bookId);
+        .eq('book_id', bookId);
 
-      if (idError) {
-        const rawMsg = idError.message || error.message || JSON.stringify(idError);
-        return {
-          success: false,
-          errorMessage: `[Supabase Delete Error] ${rawMsg}`,
-        };
+      if (errBookId) {
+        // 3차: id 개별 Delete
+        const { error: errId } = await supabase
+          .from('my_library')
+          .delete()
+          .eq('id', bookId);
+
+        if (errId) {
+          const rawMsg = errId.message || errBookId.message || error.message;
+          console.error('Failed to delete book from my_library:', rawMsg);
+          return { success: false, errorMessage: `[Supabase Delete Error] ${rawMsg}` };
+        }
       }
     }
 
