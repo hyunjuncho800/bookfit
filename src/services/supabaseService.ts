@@ -591,3 +591,30 @@ export async function deleteBookFromDb(
     };
   }
 }
+
+/**
+ * Save / Update User Profile Information
+ */
+export async function saveUserProfile(
+  userId: string,
+  profile: { parent_name: string; child_name: string; child_grade: string }
+): Promise<boolean> {
+  try {
+    const payload = {
+      id: userId,
+      user_id: userId,
+      parent_name: profile.parent_name,
+      child_name: profile.child_name,
+      child_grade: profile.child_grade,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('profiles').upsert(payload, { onConflict: 'id' as any });
+    if (error) {
+      console.warn('Profiles upsert warning:', error.message);
+    }
+    return true;
+  } catch (e) {
+    console.error('saveUserProfile exception:', e);
+    return false;
+  }
+}

@@ -25,7 +25,7 @@ export const Footer: React.FC = () => {
             </div>
 
             <p className="text-xs sm:text-sm text-cream-card/80 leading-relaxed font-light max-w-md">
-              북핏(BookFit)은 아동 맞춤형 문해력 정밀 진단 및 3-Track 도서 큐레이션 전문 기술 플랫폼입니다. 아이마다 다르게 형성된 언어 습관과 읽기 능력을 고풍스러운 서재의 감성으로 정밀 분석합니다.
+              북핏(BookFit)은 아동 맞춤형 문해력 정밀 진단 및 3-Step 도서 큐레이션 전문 기술 플랫폼입니다. 아이마다 다르게 형성된 언어 습관과 읽기 능력을 고풍스러운 서재의 감성으로 정밀 분석합니다.
             </p>
 
             <div className="flex items-center gap-2 text-xs text-oak bg-forest-dark/80 px-3.5 py-2 rounded-xl border border-oak/20 w-fit">
@@ -42,7 +42,7 @@ export const Footer: React.FC = () => {
             <ul className="space-y-2 text-cream-card/80">
               <li><a href="#hero" className="hover:text-oak transition-colors">서비스 메인</a></li>
               <li><a href="#features" className="hover:text-oak transition-colors">3차원 정밀 진단</a></li>
-              <li><a href="#tracks" className="hover:text-oak transition-colors">3-Track 추천 시스템</a></li>
+              <li><a href="#tracks" className="hover:text-oak transition-colors">3-Step 추천 시스템</a></li>
               <li><a href="#bookshelf" className="hover:text-oak transition-colors">큐레이션 서가 미리보기</a></li>
             </ul>
           </div>

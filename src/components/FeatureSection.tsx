@@ -24,7 +24,7 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({ onOpenDiagnosis 
             왜 북핏(BookFit) 문해력 솔루션일까요?
           </h2>
           <p className="text-base text-charcoal-light leading-relaxed">
-            단순한 도서 목록 나열을 넘어, 아동 발달 단계에 맞춘 3차원 검증과 3-Track 구조로 
+            단순한 도서 목록 나열을 넘어, 아동 발달 단계에 맞춘 3차원 검증과 3-Step 구조로 
             읽기 흥미와 깊이를 동시에 완성합니다.
           </p>
         </div>
@@ -83,7 +83,7 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({ onOpenDiagnosis 
             </button>
           </div>
 
-          {/* Card 2: 3-Track 맞춤 추천 */}
+          {/* Card 2: 3-Step 맞춤 추천 */}
           <div
             onClick={() => setActiveModal('ratio')}
             className="group relative bg-cream-light border border-oak/30 hover:border-oak-dark rounded-2xl p-8 shadow-book hover:shadow-elevated transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between cursor-pointer"

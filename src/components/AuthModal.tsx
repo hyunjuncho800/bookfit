@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { supabase } from '../services/supabaseService';
+import { supabase, saveUserProfile } from '../services/supabaseService';
 import { migrateGuestDataToSupabase } from '../services/authService';
-import { X, Sparkles, Mail, Lock, LogIn, ArrowRight, ShieldCheck } from 'lucide-react';
+import { X, Sparkles, Mail, Lock, LogIn, ArrowRight, ShieldCheck, User, Smile, GraduationCap } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -16,11 +16,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onSuccess,
   title = "진단 결과를 안전하게 보관하세요",
-  subTitle = "회원가입 후 아이의 연령별 독서 성장 리포트와 3-Track 맞춤 서가를 계속 관리하세요."
+  subTitle = "회원가입 후 아이의 연령별 독서 성장 리포트와 3-Step 맞춤 서가를 계속 관리하세요."
 }) => {
   const [mode, setMode] = useState<'login' | 'signup'>('signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [parentName, setParentName] = useState('');
+  const [childName, setChildName] = useState('');
+  const [childGrade, setChildGrade] = useState('초등 중학년 (3~4학년)');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -36,12 +39,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              parent_name: parentName || '부모회원',
+              child_name: childName || '자녀',
+              child_grade: childGrade,
+            }
+          }
         });
         if (error) throw error;
 
         if (data.user) {
+          await saveUserProfile(data.user.id, {
+            parent_name: parentName || '부모회원',
+            child_name: childName || '자녀',
+            child_grade: childGrade,
+          });
           await migrateGuestDataToSupabase(data.user.id);
-          alert('회원가입이 완료되었습니다! 게스트 데이터가 안전하게 이관되었습니다.');
+          alert('회원가입이 성공적으로 완료되었습니다! 게스트 진단 데이터 및 서가가 안전하게 저장되었습니다.');
           onSuccess?.();
           onClose();
         }
@@ -59,7 +74,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || '인증 중 오류가 발생했습니다.');
+      setErrorMessage(err.message || '인증 처리 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -81,7 +96,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/70 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md bg-cream-light border-2 border-oak/40 rounded-3xl shadow-elevated overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-md bg-cream-light border-2 border-oak/40 rounded-3xl shadow-elevated overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Modal Header */}
         <div className="flex items-center justify-between p-5 border-b border-cream-dark bg-forest text-white">
@@ -102,7 +117,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-4 overflow-y-auto">
           <p className="text-xs text-charcoal-muted leading-relaxed">
             {subTitle}
           </p>
@@ -130,6 +145,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           {/* Email Form */}
           <form onSubmit={handleEmailAuth} className="space-y-3">
+            {mode === 'signup' && (
+              <>
+                <div className="relative">
+                  <User className="w-4 h-4 text-oak-dark absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="부모 닉네임 (예: 지우맘)"
+                    value={parentName}
+                    onChange={(e) => setParentName(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-oak/30 focus:border-forest rounded-xl text-xs text-charcoal outline-none font-medium"
+                  />
+                </div>
+
+                <div className="relative">
+                  <Smile className="w-4 h-4 text-oak-dark absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="아이 이름 또는 닉네임 (예: 지우)"
+                    value={childName}
+                    onChange={(e) => setChildName(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-oak/30 focus:border-forest rounded-xl text-xs text-charcoal outline-none font-medium"
+                  />
+                </div>
+
+                <div className="relative">
+                  <GraduationCap className="w-4 h-4 text-oak-dark absolute left-3 top-3" />
+                  <select
+                    value={childGrade}
+                    onChange={(e) => setChildGrade(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-oak/30 focus:border-forest rounded-xl text-xs text-charcoal outline-none font-medium appearance-none"
+                  >
+                    <option value="학령전 (5~7세)">학령전 (5~7세 유아)</option>
+                    <option value="초등 저학년 (1~2학년)">초등 저학년 (1~2학년)</option>
+                    <option value="초등 중학년 (3~4학년)">초등 중학년 (3~4학년)</option>
+                    <option value="초등 고학년 (5~6학년)">초등 고학년 (5~6학년)</option>
+                  </select>
+                </div>
+              </>
+            )}
+
             <div className="relative">
               <Mail className="w-4 h-4 text-oak-dark absolute left-3 top-3" />
               <input
@@ -156,7 +213,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             {errorMessage && (
-              <p className="text-[11px] text-red-600 font-semibold bg-red-50 p-2 rounded-lg">
+              <p className="text-[11px] text-red-600 font-semibold bg-red-50 p-2 rounded-lg break-keep">
                 {errorMessage}
               </p>
             )}

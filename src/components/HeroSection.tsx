@@ -146,48 +146,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDiagnosis }) => 
                   </div>
                 </div>
 
-                {/* 3-Track Books Floating Shelf */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-charcoal flex items-center gap-1">
-                      <Library className="w-3.5 h-3.5 text-forest" />
-                      추천 3-Track 서가 세트
-                    </p>
-                    <span className="text-[10px] text-charcoal-muted">70 : 10 : 20 비율</span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 pt-1">
-                    
-                    {/* Track 1 */}
-                    <div className="p-2 bg-[#FAF6EE] rounded-lg border border-forest/20 text-center space-y-1">
-                      <span className="inline-block text-[9px] font-bold text-forest bg-forest/10 px-1.5 py-0.5 rounded">
-                        Step 1. 적정 70%
-                      </span>
-                      <p className="text-[11px] font-bold text-charcoal truncate">만복이네 떡집</p>
-                      <p className="text-[9px] text-charcoal-muted">스스로 읽는 성취감</p>
-                    </div>
-
-                    {/* Track 2 */}
-                    <div className="p-2 bg-[#FAF6EE] rounded-lg border border-oak/30 text-center space-y-1">
-                      <span className="inline-block text-[9px] font-bold text-oak-dark bg-oak/20 px-1.5 py-0.5 rounded">
-                        Step 2. 도전 10%
-                      </span>
-                      <p className="text-[11px] font-bold text-charcoal truncate">자전거 도둑</p>
-                      <p className="text-[9px] text-charcoal-muted">사고력 확장</p>
-                    </div>
-
-                    {/* Track 3 */}
-                    <div className="p-2 bg-[#FAF6EE] rounded-lg border border-charcoal-muted/30 text-center space-y-1">
-                      <span className="inline-block text-[9px] font-bold text-charcoal bg-charcoal/10 px-1.5 py-0.5 rounded">
-                        Step 3. 보완 20%
-                      </span>
-                      <p className="text-[11px] font-bold text-charcoal truncate">아홉 살 마음사전</p>
-                      <p className="text-[9px] text-charcoal-muted">어휘 집중 케어</p>
-                    </div>
-
-                  </div>
-                </div>
-
                 {/* Decorative Shelf Bar at Bottom */}
                 <div className="h-3 w-full wood-shelf rounded-md" />
 

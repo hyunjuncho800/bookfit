@@ -156,7 +156,7 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
               맞춤 큐레이션 서가 미리보기
             </h2>
             <p className="text-sm text-charcoal-light max-w-xl">
-              어휘 레벨 뱃지와 3-Track 분류를 갖춘 엄선 도서를 확인해보세요.{' '}
+              어휘 레벨 뱃지와 3-Step 분류를 갖춘 엄선 도서를 확인해보세요.{' '}
               <br className="hidden sm:inline" />
               도서를 클릭하면 부모용 독후 대화 가이드와 핵심 어휘를 볼 수 있습니다.
             </p>
@@ -226,9 +226,9 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
 
             {/* Track Tabs */}
             <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium">
-              <span className="text-charcoal-muted font-bold mr-2">3-Track:</span>
+              <span className="text-charcoal-muted font-bold mr-2">3-Step:</span>
               {[
-                { id: 'all', label: '전체 Track' },
+                { id: 'all', label: '전체 Step' },
                 { id: 'comfort', label: '적정도서 (70%)' },
                 { id: 'challenge', label: '도전도서 (10%)' },
                 { id: 'supplement', label: '보완도서 (20%)' },

@@ -214,24 +214,21 @@ export const DiagnosticReport: React.FC<DiagnosticReportProps> = ({ data, onRest
 
       </div>
 
-      {/* ④ 처방형 3-Track 도서 추천 카드 목록 */}
+      {/* ④ 처방형 3-Step 도서 추천 카드 목록 */}
       <div className="bg-cream-light border-2 border-oak/40 rounded-3xl p-6 sm:p-10 shadow-elevated space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border-b border-cream-dark pb-4">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-oak/15 text-oak-dark text-xs font-bold">
-              <BookOpen className="w-4 h-4 text-oak-dark" />
-              Prescribed 3-Step Books
-            </div>
-            <h3 className="text-2xl font-bold font-serif text-charcoal mt-1">
-              북핏 3-Step 맞춤 큐레이션 SYSTEM 처방
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold font-serif text-charcoal flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-forest" />
+              맞춤 3-Step 큐레이션 처방 도서
             </h3>
+            <span className="text-xs text-charcoal-muted font-medium">
+              (적정 70% · 도전 10% · 보완 20%)
+            </span>
           </div>
-          <span className="text-xs text-charcoal-muted font-medium">
-            적정 70% : 도전 10% : 약점보완 20% 황금 핏
-          </span>
         </div>
 
-        {/* 3-Track Prescribed Books Cards */}
+        {/* 3-Step Prescribed Books Cards */}
         <div className="grid md:grid-cols-3 gap-6">
           {data.prescribedBooks.map((book) => (
             <div
