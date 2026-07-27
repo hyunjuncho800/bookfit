@@ -5,7 +5,7 @@ import type { Book } from '../types';
 import { Library, Star, Filter, Info, Sparkles, Database, Trash2, Shield } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
 import { CurationManagerModal } from './admin/CurationManagerModal';
-import { fetchCuratedBooksFromDb, deleteBookFromDb } from '../services/supabaseService';
+import { fetchCuratedBooksFromDb, deleteBookFromDb, checkIsAdmin, supabase } from '../services/supabaseService';
 
 const ALL_SEED_BOOKS = [
   ...RECOMMENDED_BOOKS_BY_AGE.preschool,
@@ -37,6 +37,7 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
   const [dbBooks, setDbBooks] = useState<Book[]>([]);
   const [isManagerOpen, setIsManagerOpen] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isRealAdmin, setIsRealAdmin] = useState<boolean>(false);
 
   const loadBookshelfData = () => {
     fetchCuratedBooksFromDb().then((fetched) => {
@@ -49,6 +50,21 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
 
   useEffect(() => {
     loadBookshelfData();
+    checkIsAdmin().then((hasAdmin) => {
+      setIsRealAdmin(hasAdmin);
+      setIsAdmin(hasAdmin);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+      checkIsAdmin().then((hasAdmin) => {
+        setIsRealAdmin(hasAdmin);
+        setIsAdmin(hasAdmin);
+      });
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   const handleDeleteBook = async (book: Book, e: React.MouseEvent) => {
@@ -176,27 +192,31 @@ export const BookshelfSection: React.FC<BookshelfSectionProps> = ({ onSelectBook
           </div>
 
           <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
-            {/* Admin Permission Toggle Button */}
-            <button
-              onClick={() => setIsAdmin(!isAdmin)}
-              className={`px-3.5 py-2.5 rounded-xl font-bold text-xs border transition-all flex items-center gap-1.5 ${
-                isAdmin
-                  ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm'
-                  : 'bg-cream-light text-charcoal-muted border-oak/20 hover:text-charcoal'
-              }`}
-              title="관리자 권한 토글 (도서 삭제/등록 취소 조작 가능)"
-            >
-              <Shield className={`w-4 h-4 ${isAdmin ? 'text-amber-700 fill-amber-300' : ''}`} />
-              <span>{isAdmin ? '관리자(Admin): ON' : '관리자: OFF'}</span>
-            </button>
+            {/* Admin Permission Toggle & DB Register Buttons (Only visible for admin role) */}
+            {isRealAdmin && (
+              <>
+                <button
+                  onClick={() => setIsAdmin(!isAdmin)}
+                  className={`px-3.5 py-2.5 rounded-xl font-bold text-xs border transition-all flex items-center gap-1.5 ${
+                    isAdmin
+                      ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm'
+                      : 'bg-cream-light text-charcoal-muted border-oak/20 hover:text-charcoal'
+                  }`}
+                  title="관리자 권한 토글 (도서 삭제/등록 취소 조작 가능)"
+                >
+                  <Shield className={`w-4 h-4 ${isAdmin ? 'text-amber-700 fill-amber-300' : ''}`} />
+                  <span>{isAdmin ? '⚙️ 관리자 모드: ON' : '⚙️ 관리자: OFF'}</span>
+                </button>
 
-            <button
-              onClick={() => setIsManagerOpen(true)}
-              className="px-4 py-2.5 bg-oak/20 text-forest-dark hover:bg-oak/30 font-bold text-xs rounded-xl border border-oak/40 shadow-sm transition-all flex items-center gap-1.5"
-            >
-              <Database className="w-4 h-4 text-oak-dark" />
-              <span>알라딘 도서 서가 DB 등록 🛠️</span>
-            </button>
+                <button
+                  onClick={() => setIsManagerOpen(true)}
+                  className="px-4 py-2.5 bg-oak/20 text-forest-dark hover:bg-oak/30 font-bold text-xs rounded-xl border border-oak/40 shadow-sm transition-all flex items-center gap-1.5"
+                >
+                  <Database className="w-4 h-4 text-oak-dark" />
+                  <span>알라딘 도서 서가 DB 등록 🛠️</span>
+                </button>
+              </>
+            )}
 
             <button
               onClick={onOpenDiagnosis}

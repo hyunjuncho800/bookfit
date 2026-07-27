@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import type { Book } from '../../types';
 import { searchAladinBooks, fetchAladinCategoryBooksWithDebug } from '../../services/aladinApi';
-import { saveCuratedBookToDb, saveBatchCuratedBooksToDb, fetchCuratedBooksFromDb } from '../../services/supabaseService';
+import { saveCuratedBookToDb, saveBatchCuratedBooksToDb, fetchCuratedBooksFromDb, checkIsAdmin } from '../../services/supabaseService';
 import { BookCoverImage } from '../common/BookCoverImage';
 
 interface CurationManagerModalProps {
@@ -43,6 +43,18 @@ export const CurationManagerModal: React.FC<CurationManagerModalProps> = ({
   const [isBatchSaving, setIsBatchSaving] = useState<boolean>(false);
   const [savedBookIds, setSavedBookIds] = useState<string[]>([]);
   const [savingBookId, setSavingBookId] = useState<string | null>(null);
+
+  // Admin Route Guard & Role Verification
+  useEffect(() => {
+    if (!isOpen) return;
+
+    checkIsAdmin().then((hasAdmin) => {
+      if (!hasAdmin) {
+        alert('⚠️ 접근 권한이 없습니다. 관리자 전용 메뉴입니다.');
+        onClose();
+      }
+    });
+  }, [isOpen, onClose]);
 
   // Load existing DB books to check for duplicates
   const loadExistingDbBooks = async () => {

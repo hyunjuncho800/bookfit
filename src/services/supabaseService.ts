@@ -632,3 +632,36 @@ export async function saveUserProfile(
     return false;
   }
 }
+
+/**
+ * Check if the logged-in user has 'admin' role
+ */
+export async function checkIsAdmin(): Promise<boolean> {
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData?.user;
+    if (!user) return false;
+
+    // 1. Check user metadata or app metadata
+    if (user.app_metadata?.role === 'admin' || user.user_metadata?.role === 'admin') {
+      return true;
+    }
+
+    // 2. Admin email whitelist
+    if (user.email && (user.email.includes('admin') || user.email.includes('hyunjuncho800'))) {
+      return true;
+    }
+
+    // 3. Query profiles table for role
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    return profile?.role === 'admin';
+  } catch (e) {
+    console.error('Error in checkIsAdmin:', e);
+    return false;
+  }
+}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Menu, X, Sparkles, ChevronRight, User, LogOut, LogIn } from 'lucide-react';
-import { supabase } from '../services/supabaseService';
+import { BookOpen, Menu, X, Sparkles, ChevronRight, User, LogOut, LogIn, Shield } from 'lucide-react';
+import { supabase, checkIsAdmin } from '../services/supabaseService';
 
 interface HeaderProps {
   onOpenDiagnosis: () => void;
@@ -11,14 +11,17 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ onOpenDiagnosis, onNavigate, onOpenAuth }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }: { data: any }) => {
       setUser(data.user);
     });
+    checkIsAdmin().then((hasAdmin) => setIsAdminUser(hasAdmin));
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       setUser(session?.user ?? null);
+      checkIsAdmin().then((hasAdmin) => setIsAdminUser(hasAdmin));
     });
 
     return () => {
@@ -113,6 +116,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDiagnosis, onNavigate, onO
                 <span className="text-xs font-bold text-forest flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-oak-dark" />
                   {user.email?.split('@')[0]}님
+                  {isAdminUser && (
+                    <span className="text-[10px] font-extrabold text-amber-900 bg-amber-200 px-2 py-0.5 rounded-md border border-amber-400 shadow-2xs flex items-center gap-0.5">
+                      <Shield className="w-3 h-3 fill-amber-500" />
+                      관리자
+                    </span>
+                  )}
                 </span>
                 <button
                   onClick={handleSignOut}
