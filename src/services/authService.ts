@@ -113,7 +113,7 @@ export const migrateGuestDataToSupabase = async (userId: string): Promise<boolea
           book_id: item.book.id,
           title: item.book.title,
           author: item.book.author,
-          cover_image: item.book.coverImage,
+          cover_url: item.book.coverImage,
           status: item.status
         };
         await supabase.from('my_library').upsert(payload, { onConflict: 'user_id,book_id' as any });

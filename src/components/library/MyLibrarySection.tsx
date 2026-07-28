@@ -175,27 +175,42 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     if (!quizTargetBook) return;
 
     const targetId = quizTargetBook.id;
-    const res = await updateLibraryBookStatus(targetId, 'completed', 100);
 
-    if (res.success) {
-      await loadLibraryData();
+    // 1. Optimistic UI: 로컬 state status를 즉시 'completed'로 변경
+    setMyBooks((prev) =>
+      prev.map((b) => {
+        const bId = String(b.book?.id || b.id || (b as any).book_id);
+        if (bId === String(targetId) || String(b.id) === String(targetId)) {
+          return { ...b, status: 'completed' as any, progressPercent: 100 };
+        }
+        return b;
+      })
+    );
 
-      setProfile((prev) => ({
-        ...prev,
-        currentExp: Math.min(prev.nextLevelExp, prev.currentExp + exp),
-        completedCountThisMonth: prev.completedCountThisMonth + 1,
-      }));
+    // 2. DB status를 'completed'로 신규/갱신 저장 (절대 to_read로 저장되지 않음!)
+    const saveRes = await saveOrUpdateLibraryBook(quizTargetBook, 'completed', 100);
+    console.log('[handleQuizSubmitted saveOrUpdateResult]:', saveRes);
 
-      setActiveTab('completed');
-      setQuizTargetBook(null);
-
-      setShowCelebration(true);
-      setTimeout(() => setShowCelebration(false), 4000);
-      window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
-    } else {
-      alert(`⚠️ 완독 저장 중 오류: ${res.errorMessage}`);
-      setQuizTargetBook(null);
+    if (!saveRes.success) {
+      await updateLibraryBookStatus(targetId, 'completed', 100);
     }
+
+    setProfile((prev) => ({
+      ...prev,
+      currentExp: Math.min(prev.nextLevelExp, prev.currentExp + exp),
+      completedCountThisMonth: prev.completedCountThisMonth + 1,
+    }));
+
+    // 3. 서재 탭을 [🥳 완독한 책]으로 바로 자동 이동
+    setActiveTab('completed');
+    setQuizTargetBook(null);
+
+    setShowCelebration(true);
+    setTimeout(() => setShowCelebration(false), 4000);
+
+    // 4. 비밀서재 목록 재조회 (fetchMyLibrary) & 전역 이벤트 발생
+    await fetchMyLibrary();
+    window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId: targetId, status: 'completed' } }));
   };
 
   const fetchMyLibrary = async () => {
