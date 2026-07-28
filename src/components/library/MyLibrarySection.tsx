@@ -201,11 +201,95 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     await loadLibraryData();
   };
 
+  const handleUpdateStatusToReading = async (bookId: string) => {
+    console.log('[handleUpdateStatusToReading Triggered] bookId:', bookId);
+
+    // 즉시 로컬 탭 'reading'으로 전환 및 UI 반영
+    setActiveTab('reading');
+    setMyBooks((prev) =>
+      prev.map((item) => {
+        const bId = String(item.book?.id || item.id || (item as any).book_id);
+        if (bId === String(bookId) || String(item.id) === String(bookId)) {
+          return { ...item, status: 'reading' as any };
+        }
+        return item;
+      })
+    );
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert("로그인이 필요합니다.");
+      return;
+    }
+
+    // DB 업데이트 시도 (.or id.eq 및 user_id.eq 구조)
+    const { data, error } = await supabase
+      .from('my_library')
+      .update({ 
+        status: 'reading', 
+        updated_at: new Date().toISOString() 
+      })
+      .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+      .eq('book_id', bookId)
+      .select();
+
+    console.log("UPDATE 시도 결과 데이터:", data);
+    console.log("UPDATE 시도 에러:", error);
+
+    if (error || !data || data.length === 0) {
+      // Fallback query if book_id mismatch or id = bookId
+      const fallback = await supabase
+        .from('my_library')
+        .update({ 
+          status: 'reading', 
+          updated_at: new Date().toISOString() 
+        })
+        .or(`book_id.eq.${bookId},id.eq.${bookId}`)
+        .select();
+
+      console.log("UPDATE Fallback 시도 결과 데이터:", fallback.data);
+      console.log("UPDATE Fallback 시도 에러:", fallback.error);
+
+      if (fallback.error) {
+        alert("DB 업데이트 실패: " + fallback.error.message);
+        return;
+      }
+    }
+
+    // 게스트 로컬스토리지 도서 갱신
+    try {
+      const guestBooks = getGuestLibraryBooks();
+      const updatedGuest = guestBooks.map((g) => {
+        const bId = String(g.book?.id || g.id);
+        if (bId === String(bookId)) {
+          return { ...g, status: 'reading' as const };
+        }
+        return g;
+      });
+      localStorage.setItem('bookfit_guest_library', JSON.stringify(updatedGuest));
+    } catch (e) {
+      console.warn('Guest localStorage sync warning:', e);
+    }
+
+    // 업데이트 성공 시 탭 전환 확정 및 서재 목록 재조회
+    setActiveTab('reading');
+    await fetchMyLibrary();
+    window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId, status: 'reading' } }));
+  };
+
   // Status Change Handler ('wantToRead' | 'reading' | 'completed') with Optimistic UI & Supabase DB UPDATE
   const handleUpdateStatus = async (targetBookId: string, newStatus: ReadingStatus | string) => {
+    if (newStatus === 'reading') {
+      await handleUpdateStatusToReading(targetBookId);
+      return;
+    }
+
     console.log(`[MyLibrarySection handleUpdateStatus] Target bookId: ${targetBookId}, newStatus: ${newStatus}`);
 
-    // 1. [Optimistic UI & 로컬 State 강제 갱신] DB 요청 전 화면 즉시 변경 (0ms)
+    const normTab: ReadingStatus = isReading(newStatus) ? 'reading' : isCompleted(newStatus) ? 'completed' : 'wantToRead';
+    setActiveTab(normTab);
+
     setMyBooks((prev) =>
       prev.map((item) => {
         const bId = String(item.book?.id || item.id || (item as any).book_id);
@@ -216,63 +300,30 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
       })
     );
 
-    // 탭 카운트 및 UI 위치 즉시 변경
-    const normTab: ReadingStatus = isReading(newStatus) ? 'reading' : isCompleted(newStatus) ? 'completed' : 'wantToRead';
-    setActiveTab(normTab);
-
-    // 2. [Supabase UPDATE 조건 및 에러/count 로그 출력]
     const { data: { user } } = await supabase.auth.getUser();
-    let isUpdated = false;
 
     if (user) {
-      // Attempt 1: eq('user_id', user.id).eq('book_id', targetBookId).select()
       let { data, error } = await supabase
         .from('my_library')
-        .update({ status: newStatus, updated_at: new Date() })
-        .eq('user_id', user.id)
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .or(`id.eq.${user.id},user_id.eq.${user.id}`)
         .eq('book_id', targetBookId)
         .select();
 
-      console.log('[Supabase Update Attempt 1] user_id & book_id:', { count: data?.length || 0, data, error });
+      console.log("UPDATE 시도 결과 데이터:", data);
+      console.log("UPDATE 시도 에러:", error);
 
-      if (!error && data && data.length > 0) {
-        isUpdated = true;
-      } else {
-        // Attempt 2: eq('id', user.id).eq('book_id', targetBookId).select() (유저컬럼명 id 매핑)
-        let retry1 = await supabase
+      if (error || !data || data.length === 0) {
+        await supabase
           .from('my_library')
-          .update({ status: newStatus, updated_at: new Date() })
-          .eq('id', user.id)
-          .eq('book_id', targetBookId)
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .or(`book_id.eq.${targetBookId},id.eq.${targetBookId}`)
           .select();
-
-        console.log('[Supabase Update Attempt 2] id & book_id:', { count: retry1.data?.length || 0, data: retry1.data, error: retry1.error });
-
-        if (!retry1.error && retry1.data && retry1.data.length > 0) {
-          isUpdated = true;
-        } else {
-          // Attempt 3: book_id = targetBookId OR id = targetBookId
-          let retry2 = await supabase
-            .from('my_library')
-            .update({ status: newStatus, updated_at: new Date() })
-            .or(`book_id.eq.${targetBookId},id.eq.${targetBookId}`)
-            .select();
-
-          console.log('[Supabase Update Attempt 3] book_id or id:', { count: retry2.data?.length || 0, data: retry2.data, error: retry2.error });
-          if (!retry2.error) isUpdated = true;
-        }
       }
     } else {
-      const res = await updateLibraryBookStatus(targetBookId, newStatus);
-      isUpdated = res.success;
-      console.log('[Guest Update Attempt]:', res);
+      await updateLibraryBookStatus(targetBookId, newStatus);
     }
 
-    if (!isUpdated) {
-      console.warn('DB UPDATE executed, row count check passed.');
-    }
-
-    // 3. 비밀서재 전체 데이터 재요청 (DB 최신화)
     await fetchMyLibrary();
     window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId: targetBookId, status: newStatus } }));
   };

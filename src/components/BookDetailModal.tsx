@@ -45,17 +45,20 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
     const dbStatus = newStatus === 'to_read' ? 'wantToRead' : newStatus;
 
     if (user) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('my_library')
         .update({ 
           status: dbStatus, 
-          updated_at: new Date() 
+          updated_at: new Date().toISOString() 
         })
-        .eq('user_id', user.id) // my_library 유저 컬럼 id 기준
-        .eq('book_id', book.id);
+        .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+        .eq('book_id', book.id)
+        .select();
 
-      if (error) {
-        // Fallback update
+      console.log("UPDATE 시도 결과 데이터:", data);
+      console.log("UPDATE 시도 에러:", error);
+
+      if (error || !data || data.length === 0) {
         await updateLibraryBookStatus(book.id, dbStatus as any);
       }
     } else {
@@ -68,7 +71,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
     else if (norm === 'reading') setActiveGuideStage('during');
     else if (norm === 'completed') setActiveGuideStage('after');
 
-    alert(`📖 '${book.title}' 도서가 [${norm === 'reading' ? '읽는 중' : norm === 'completed' ? '완독 완료' : '읽을 책'}] 탭으로 변경되었습니다!`);
+    alert(`📖 '${book.title}' 도서가 [${norm === 'reading' ? '읽는 중' : norm === 'completed' ? '완독 완료' : '읽을 책'}] 탭으로 이동되었습니다!`);
 
     // 부모 서재 페이지 실시간 목록 재조회 이벤트 발송
     window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: dbStatus } }));
