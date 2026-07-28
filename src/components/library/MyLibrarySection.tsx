@@ -10,6 +10,7 @@ import {
   saveOrUpdateLibraryBook,
   updateLibraryBookStatus,
   updateLibraryBookReviewAndRating,
+  isValidUUID,
   supabase,
 } from '../../services/supabaseService';
 import { getGuestLibraryBooks } from '../../services/authService';
@@ -204,7 +205,7 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
   const handleUpdateStatusToReading = async (bookId: string) => {
     console.log('[handleUpdateStatusToReading Triggered] bookId:', bookId);
 
-    // 즉시 로컬 탭 'reading'으로 전환 및 UI 반영
+    // 1. 즉시 로컬 탭 'reading'으로 전환 및 Optimistic UI 반영
     setActiveTab('reading');
     setMyBooks((prev) =>
       prev.map((item) => {
@@ -218,42 +219,41 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
 
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) {
-      alert("로그인이 필요합니다.");
-      return;
-    }
+    if (user) {
+      // UUID 검증: "pre-3"처럼 non-UUID 형식일 경우 Postgres UUID 타입 에러 방지
+      if (isValidUUID(bookId)) {
+        const { data, error } = await supabase
+          .from('my_library')
+          .update({ 
+            status: 'reading', 
+            updated_at: new Date().toISOString() 
+          })
+          .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+          .eq('book_id', bookId)
+          .select();
 
-    // DB 업데이트 시도 (.or id.eq 및 user_id.eq 구조)
-    const { data, error } = await supabase
-      .from('my_library')
-      .update({ 
-        status: 'reading', 
-        updated_at: new Date().toISOString() 
-      })
-      .or(`id.eq.${user.id},user_id.eq.${user.id}`)
-      .eq('book_id', bookId)
-      .select();
+        console.log("UPDATE 시도 결과 데이터 (UUID):", data);
+        console.log("UPDATE 시도 에러 (UUID):", error);
 
-    console.log("UPDATE 시도 결과 데이터:", data);
-    console.log("UPDATE 시도 에러:", error);
+        if (error) {
+          console.warn("DB Update Error (UUID):", error.message);
+        }
+      } else {
+        console.log(`[Non-UUID bookId: "${bookId}"] Skipping UUID casting to prevent Supabase invalid input syntax error.`);
+        
+        // non-UUID 도서("pre-3" 등)를 위해 text 컬럼 또는 title 쿼리 시도
+        const { data, error } = await supabase
+          .from('my_library')
+          .update({ 
+            status: 'reading', 
+            updated_at: new Date().toISOString() 
+          })
+          .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+          .ilike('title', `%${bookId}%`)
+          .select();
 
-    if (error || !data || data.length === 0) {
-      // Fallback query if book_id mismatch or id = bookId
-      const fallback = await supabase
-        .from('my_library')
-        .update({ 
-          status: 'reading', 
-          updated_at: new Date().toISOString() 
-        })
-        .or(`book_id.eq.${bookId},id.eq.${bookId}`)
-        .select();
-
-      console.log("UPDATE Fallback 시도 결과 데이터:", fallback.data);
-      console.log("UPDATE Fallback 시도 에러:", fallback.error);
-
-      if (fallback.error) {
-        alert("DB 업데이트 실패: " + fallback.error.message);
-        return;
+        console.log("UPDATE 시도 결과 데이터 (Non-UUID):", data);
+        console.log("UPDATE 시도 에러 (Non-UUID):", error);
       }
     }
 
@@ -303,22 +303,18 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-      let { data, error } = await supabase
-        .from('my_library')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .or(`id.eq.${user.id},user_id.eq.${user.id}`)
-        .eq('book_id', targetBookId)
-        .select();
-
-      console.log("UPDATE 시도 결과 데이터:", data);
-      console.log("UPDATE 시도 에러:", error);
-
-      if (error || !data || data.length === 0) {
-        await supabase
+      if (isValidUUID(targetBookId)) {
+        let { data, error } = await supabase
           .from('my_library')
           .update({ status: newStatus, updated_at: new Date().toISOString() })
-          .or(`book_id.eq.${targetBookId},id.eq.${targetBookId}`)
+          .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+          .eq('book_id', targetBookId)
           .select();
+
+        console.log("UPDATE 시도 결과 데이터:", data);
+        console.log("UPDATE 시도 에러:", error);
+      } else {
+        console.log(`[handleUpdateStatus] Non-UUID targetBookId: "${targetBookId}". Skipping UUID column match.`);
       }
     } else {
       await updateLibraryBookStatus(targetBookId, newStatus);

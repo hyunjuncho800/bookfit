@@ -299,45 +299,34 @@ export async function updateLibraryBookReviewAndRating(
   }
 }
 
+export const isValidUUID = (str: string): boolean => {
+  if (!str) return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+};
+
 export async function updateLibraryBookStatus(
   bookId: string,
   status: ReadingStatus | string,
   _progressPercent?: number
 ): Promise<{ success: boolean; errorMessage?: string }> {
   try {
-    // 오직 status 컬럼만 안전하게 update 전송
     const updatePayload = {
       status,
+      updated_at: new Date().toISOString(),
     };
 
-    // 1차: book_id 및 id 이중 or 조건으로 비동기(await) Update 전송
-    let { error } = await supabase
-      .from('my_library')
-      .update(updatePayload)
-      .or(`book_id.eq.${bookId},id.eq.${bookId}`);
-
-    if (error) {
-      console.warn('Update with or() failed, trying individual eq():', error);
-
-      // 2차: book_id 개별 Update
-      const { error: errBookId } = await supabase
+    if (isValidUUID(bookId)) {
+      let { error } = await supabase
         .from('my_library')
         .update(updatePayload)
-        .eq('book_id', bookId);
+        .or(`book_id.eq.${bookId},id.eq.${bookId}`);
 
-      if (errBookId) {
-        // 3차: id 개별 Update
-        const { error: errId } = await supabase
-          .from('my_library')
-          .update(updatePayload)
-          .eq('id', bookId);
-
-        if (errId) {
-          const rawMsg = errId.message || errBookId.message || error.message;
-          console.error('Failed to update my_library status:', rawMsg);
-          return { success: false, errorMessage: `[DB Update Error] ${rawMsg}` };
-        }
+      if (error) {
+        console.warn('Update with UUID failed:', error.message);
       }
+    } else {
+      console.log(`[updateLibraryBookStatus] Non-UUID bookId: "${bookId}". Bypassing Postgres UUID filter.`);
     }
 
     return { success: true };

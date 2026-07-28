@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Book, AIGeneratedGuide } from '../types';
 import { generateBookGuide } from '../services/aiGuideGenerator';
-import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb, updateLibraryBookStatus, supabase } from '../services/supabaseService';
+import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb, updateLibraryBookStatus, isValidUUID, supabase } from '../services/supabaseService';
 import { getGuestLibraryBooks, saveGuestLibraryBook, removeGuestLibraryBook } from '../services/authService';
 import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, ShoppingBag, Brain, Loader2, Trash2 } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
@@ -45,20 +45,21 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
     const dbStatus = newStatus === 'to_read' ? 'wantToRead' : newStatus;
 
     if (user) {
-      const { data, error } = await supabase
-        .from('my_library')
-        .update({ 
-          status: dbStatus, 
-          updated_at: new Date().toISOString() 
-        })
-        .or(`id.eq.${user.id},user_id.eq.${user.id}`)
-        .eq('book_id', book.id)
-        .select();
+      if (isValidUUID(book.id)) {
+        const { data, error } = await supabase
+          .from('my_library')
+          .update({ 
+            status: dbStatus, 
+            updated_at: new Date().toISOString() 
+          })
+          .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+          .eq('book_id', book.id)
+          .select();
 
-      console.log("UPDATE 시도 결과 데이터:", data);
-      console.log("UPDATE 시도 에러:", error);
-
-      if (error || !data || data.length === 0) {
+        console.log("UPDATE 시도 결과 데이터 (UUID):", data);
+        console.log("UPDATE 시도 에러 (UUID):", error);
+      } else {
+        console.log(`[BookDetailModal] Non-UUID bookId: "${book.id}". Bypassing UUID eq filter.`);
         await updateLibraryBookStatus(book.id, dbStatus as any);
       }
     } else {
