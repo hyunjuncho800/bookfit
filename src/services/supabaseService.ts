@@ -199,8 +199,8 @@ export async function saveOrUpdateLibraryBook(
     const lexileLevel = String(item.lexileLevel || item.lexile_level || '');
     const trackType = String(item.trackType || item.track_type || 'comfort');
 
+    const isUuid = isValidUUID(bookId);
     const bookPayload: any = {
-      book_id: bookId,
       title: title,
       author: author,
       cover_url: coverUrl,
@@ -216,39 +216,34 @@ export async function saveOrUpdateLibraryBook(
       rating: rating !== undefined ? rating : Number(item.rating) || 5,
     };
 
+    if (isUuid) {
+      bookPayload.book_id = bookId;
+    }
+
     if (userId) {
       bookPayload.user_id = userId;
     }
 
-    // 1차 Upsert 시도: user_id,book_id 우선
+    // 1차 Direct Insert/Upsert 시도
     let { error } = await supabase
       .from('my_library')
-      .upsert([bookPayload], { onConflict: userId ? 'user_id,book_id' : 'book_id' });
+      .upsert([bookPayload], { onConflict: (isUuid && userId) ? 'user_id,book_id' : undefined });
 
     if (error) {
-      console.warn('Primary upsert failed, retrying book_id upsert:', error.message);
+      console.warn('Primary upsert notice:', error.message, 'retrying direct insert');
 
-      // 2차 시도: book_id 단일 upsert
-      const retryUpsert = await supabase
+      // 2차 시도: direct insert
+      const retryInsert = await supabase
         .from('my_library')
-        .upsert([bookPayload], { onConflict: 'book_id' });
+        .insert([bookPayload]);
 
-      if (retryUpsert.error) {
-        console.warn('Secondary upsert failed, retrying direct insert:', retryUpsert.error.message);
-
-        // 3차 시도: direct insert
-        const retryInsert = await supabase
-          .from('my_library')
-          .insert([bookPayload]);
-
-        if (retryInsert.error) {
-          console.error('All DB insert/upsert attempts failed:', retryInsert.error.message);
-          return {
-            success: false,
-            errorMessage: `저장 실패 원인: ${retryInsert.error.message}`,
-            rawError: retryInsert.error,
-          };
-        }
+      if (retryInsert.error) {
+        console.error('All DB insert/upsert attempts failed:', retryInsert.error.message);
+        return {
+          success: false,
+          errorMessage: `저장 실패 원인: ${retryInsert.error.message}`,
+          rawError: retryInsert.error,
+        };
       }
     }
 
