@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Book, AIGeneratedGuide } from '../types';
 import { generateBookGuide } from '../services/aiGuideGenerator';
-import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb, updateLibraryBookStatus, isValidUUID, supabase } from '../services/supabaseService';
+import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb, updateLibraryBookStatus, supabase } from '../services/supabaseService';
 import { getGuestLibraryBooks, saveGuestLibraryBook, removeGuestLibraryBook } from '../services/authService';
 import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, ShoppingBag, Brain, Loader2, Trash2 } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
@@ -42,28 +42,28 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
     if (!book) return;
     const { data: { user } } = await supabase.auth.getUser();
 
-    const dbStatus = newStatus === 'to_read' ? 'wantToRead' : newStatus;
+    const dbStatus = newStatus === 'to_read' ? 'wantToRead' : (newStatus === 'reading' ? 'reading' : newStatus === 'completed' ? 'completed' : newStatus);
 
     if (user) {
-      if (isValidUUID(book.id)) {
-        const { data, error } = await supabase
-          .from('my_library')
-          .update({ 
-            status: dbStatus, 
-            updated_at: new Date().toISOString() 
-          })
-          .or(`id.eq.${user.id},user_id.eq.${user.id}`)
-          .eq('book_id', book.id)
-          .select();
+      // 1. DB UPDATE 시도
+      const { data, error } = await supabase
+        .from('my_library')
+        .update({ 
+          status: dbStatus, 
+          updated_at: new Date().toISOString() 
+        })
+        .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+        .or(`book_id.eq.${String(book.id)},id.eq.${String(book.id)}`)
+        .select();
 
-        console.log("UPDATE 시도 결과 데이터 (UUID):", data);
-        console.log("UPDATE 시도 에러 (UUID):", error);
-      } else {
-        console.log(`[BookDetailModal] Non-UUID bookId: "${book.id}". Bypassing UUID eq filter.`);
-        await updateLibraryBookStatus(book.id, dbStatus as any);
+      console.log("모달 DB UPDATE 시도 결과:", data, error);
+
+      if (error || !data || data.length === 0) {
+        // Fallback save/upsert
+        await saveOrUpdateLibraryBook(book, dbStatus as any);
       }
     } else {
-      await updateLibraryBookStatus(book.id, dbStatus as any);
+      await saveOrUpdateLibraryBook(book, dbStatus as any);
     }
 
     const norm = getNormalizedStatus(dbStatus);
@@ -74,7 +74,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
 
     alert(`📖 '${book.title}' 도서가 [${norm === 'reading' ? '읽는 중' : norm === 'completed' ? '완독 완료' : '읽을 책'}] 탭으로 이동되었습니다!`);
 
-    // 부모 서재 페이지 실시간 목록 재조회 이벤트 발송
+    // 부모 서재 페이지 실시간 목록 재조회 및 탭 이동 전역 이벤트 발송
     window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: dbStatus } }));
   };
 

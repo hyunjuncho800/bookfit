@@ -10,7 +10,6 @@ import {
   saveOrUpdateLibraryBook,
   updateLibraryBookStatus,
   updateLibraryBookReviewAndRating,
-  isValidUUID,
   supabase,
 } from '../../services/supabaseService';
 import { getGuestLibraryBooks } from '../../services/authService';
@@ -217,19 +216,22 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     await loadLibraryData();
   };
 
-  const handleUpdateStatusToReading = async (bookId: string, itemObj?: any) => {
-    console.log('[handleUpdateStatusToReading Triggered] bookId:', bookId);
+  // 통합 상태 업데이트 함수: DB status 업데이트, 서재 목록 리패치(fetchMyLibrary) & 해당 탭 자동 이동(setActiveTab)
+  const handleUpdateBookStatus = async (bookId: string, targetStatus: ReadingStatus | string, itemObj?: any) => {
+    console.log(`[handleUpdateBookStatus] bookId: ${bookId}, targetStatus: ${targetStatus}`);
 
     const targetItem = itemObj || myBooks.find((b) => String(b.book?.id || b.id || (b as any).book_id) === String(bookId));
-    const bookData = targetItem?.book || targetItem || { id: bookId, title: '알사탕' };
+    const bookData = targetItem?.book || targetItem || { id: bookId, title: '도서' };
 
-    // 1. 즉시 로컬 탭 'reading'으로 전환 및 Optimistic UI 반영
-    setActiveTab('reading');
+    // 1. 해당 탭으로 즉시 전환 및 Optimistic UI 반영
+    const normTab: ReadingStatus = isReading(targetStatus) ? 'reading' : isCompleted(targetStatus) ? 'completed' : 'wantToRead';
+    setActiveTab(normTab);
+
     setMyBooks((prev) =>
       prev.map((item) => {
         const bId = String(item.book?.id || item.id || (item as any).book_id);
         if (bId === String(bookId) || String(item.id) === String(bookId)) {
-          return { ...item, status: 'reading' as any };
+          return { ...item, status: normTab as any };
         }
         return item;
       })
@@ -242,114 +244,35 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
       return;
     }
 
-    let isDbUpdated = false;
+    // 1. DB status 업데이트
+    let { data, error } = await supabase
+      .from('my_library')
+      .update({ 
+        status: normTab, 
+        updated_at: new Date().toISOString() 
+      })
+      .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+      .or(`book_id.eq.${String(bookId)},id.eq.${String(bookId)}`)
+      .select();
 
-    // 2-1. UUID 형식일 때 DB UPDATE 시도
-    if (isValidUUID(bookId)) {
-      const { data, error } = await supabase
-        .from('my_library')
-        .update({ 
-          status: 'reading', 
-          updated_at: new Date().toISOString() 
-        })
-        .or(`id.eq.${user.id},user_id.eq.${user.id}`)
-        .eq('book_id', bookId)
-        .select();
+    console.log("DB 업데이트 시도 결과:", data, error);
 
-      console.log("UPDATE 시도 결과 데이터 (UUID):", data);
-      console.log("UPDATE 시도 에러 (UUID):", error);
-
-      if (!error && data && data.length > 0) {
-        isDbUpdated = true;
+    if (error || !data || data.length === 0) {
+      // Fallback: saveOrUpdateLibraryBook으로 DB 저장/업데이트
+      if (bookData) {
+        const saveRes = await saveOrUpdateLibraryBook(bookData, normTab);
+        console.log("[saveOrUpdateLibraryBook Fallback Result]:", saveRes);
       }
     }
 
-    // 2-2. 0건 수정되었거나 "pre-3" 등 non-UUID일 때: Title 기준 DB UPDATE 시도
-    if (!isDbUpdated && bookData?.title) {
-      const { data, error } = await supabase
-        .from('my_library')
-        .update({ 
-          status: 'reading', 
-          updated_at: new Date().toISOString() 
-        })
-        .or(`id.eq.${user.id},user_id.eq.${user.id}`)
-        .eq('title', bookData.title)
-        .select();
-
-      console.log("UPDATE 시도 결과 데이터 (Title):", data);
-      console.log("UPDATE 시도 에러 (Title):", error);
-
-      if (!error && data && data.length > 0) {
-        isDbUpdated = true;
-      }
-    }
-
-    // 2-3. 여전히 DB 0건 수정 시 (미등록 도서였던 경우) ➔ saveOrUpdateLibraryBook으로 DB에 신규 저장(UPSERT/INSERT)!
-    if (!isDbUpdated && bookData) {
-      console.log("[UPSERT Fallback] my_library DB에 도서 status: 'reading'으로 새로 저장 시도...");
-      const saveRes = await saveOrUpdateLibraryBook(bookData, 'reading');
-      console.log("[UPSERT Fallback Result]:", saveRes);
-      if (saveRes.success) {
-        isDbUpdated = true;
-      } else {
-        console.error("실제 DB 반영 실패:", saveRes.errorMessage);
-        alert("DB 반영에 실패했습니다. " + saveRes.errorMessage);
-        return;
-      }
-    }
-
-    // 게스트 로컬스토리지 도서 갱신
-    try {
-      const guestBooks = getGuestLibraryBooks();
-      const updatedGuest = guestBooks.map((g) => {
-        const bId = String(g.book?.id || g.id);
-        if (bId === String(bookId)) {
-          return { ...g, status: 'reading' as const };
-        }
-        return g;
-      });
-      localStorage.setItem('bookfit_guest_library', JSON.stringify(updatedGuest));
-    } catch (e) {
-      console.warn('Guest localStorage sync warning:', e);
-    }
-
-    // 실제 DB 반영 성공 시 탭 전환 확정 및 서재 목록 재조회
-    setActiveTab('reading');
+    // 2. 해당 탭으로 전환 확정 및 목록 리패치
+    setActiveTab(normTab);
     await fetchMyLibrary();
-    window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId, status: 'reading' } }));
+    window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId, status: normTab } }));
   };
 
-  // Status Change Handler ('wantToRead' | 'reading' | 'completed') with Optimistic UI & Supabase DB UPDATE
   const handleUpdateStatus = async (targetBookId: string, newStatus: ReadingStatus | string, itemObj?: any) => {
-    if (newStatus === 'reading') {
-      await handleUpdateStatusToReading(targetBookId, itemObj);
-      return;
-    }
-
-    console.log(`[MyLibrarySection handleUpdateStatus] Target bookId: ${targetBookId}, newStatus: ${newStatus}`);
-
-    const normTab: ReadingStatus = isReading(newStatus) ? 'reading' : isCompleted(newStatus) ? 'completed' : 'wantToRead';
-    setActiveTab(normTab);
-
-    setMyBooks((prev) =>
-      prev.map((item) => {
-        const bId = String(item.book?.id || item.id || (item as any).book_id);
-        if (bId === String(targetBookId) || String(item.id) === String(targetBookId)) {
-          return { ...item, status: newStatus as any };
-        }
-        return item;
-      })
-    );
-
-    const targetItem = itemObj || myBooks.find((b) => String(b.book?.id || b.id || (b as any).book_id) === String(targetBookId));
-    const bookData = targetItem?.book || targetItem;
-
-    if (bookData) {
-      await saveOrUpdateLibraryBook(bookData, newStatus as any);
-    }
-
-    await fetchMyLibrary();
-    window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId: targetBookId, status: newStatus } }));
+    await handleUpdateBookStatus(targetBookId, newStatus, itemObj);
   };
 
   // Save Review Modal Form & Sync to Supabase
