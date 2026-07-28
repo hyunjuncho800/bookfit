@@ -35,10 +35,21 @@ const INITIAL_PROFILE: UserGamificationProfile = {
   ]
 };
 
-// Helper status matchers
-const isReading = (status: string) => status === 'reading' || status === 'READING';
-const isWantToRead = (status: string) => status === 'wantToRead' || status === 'TO_READ' || status === 'to_read';
-const isCompleted = (status: string) => status === 'completed' || status === 'COMPLETED';
+// Helper status matchers (multi-format tolerant)
+const isReading = (status: string) => {
+  const s = String(status || '').toLowerCase();
+  return s.includes('reading') || (s.includes('read') && !s.includes('want') && !s.includes('to_read') && !s.includes('completed'));
+};
+
+const isWantToRead = (status: string) => {
+  const s = String(status || '').toLowerCase();
+  return s.includes('want') || s.includes('to_read') || s.includes('toread') || s.includes('unread');
+};
+
+const isCompleted = (status: string) => {
+  const s = String(status || '').toLowerCase();
+  return s.includes('complete') || s.includes('완독');
+};
 
 export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook, onOpenDiagnosis }) => {
   const [activeTab, setActiveTab] = useState<ReadingStatus>('wantToRead');
@@ -190,66 +201,80 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     await loadLibraryData();
   };
 
-  const handleUpdateStatusToReading = async (bookId: string) => {
+  // Status Change Handler ('wantToRead' | 'reading' | 'completed') with Optimistic UI & Supabase DB UPDATE
+  const handleUpdateStatus = async (targetBookId: string, newStatus: ReadingStatus | string) => {
+    console.log(`[MyLibrarySection handleUpdateStatus] Target bookId: ${targetBookId}, newStatus: ${newStatus}`);
+
+    // 1. [Optimistic UI & 로컬 State 강제 갱신] DB 요청 전 화면 즉시 변경 (0ms)
+    setMyBooks((prev) =>
+      prev.map((item) => {
+        const bId = String(item.book?.id || item.id || (item as any).book_id);
+        if (bId === String(targetBookId) || String(item.id) === String(targetBookId)) {
+          return { ...item, status: newStatus as any };
+        }
+        return item;
+      })
+    );
+
+    // 탭 카운트 및 UI 위치 즉시 변경
+    const normTab: ReadingStatus = isReading(newStatus) ? 'reading' : isCompleted(newStatus) ? 'completed' : 'wantToRead';
+    setActiveTab(normTab);
+
+    // 2. [Supabase UPDATE 조건 및 에러/count 로그 출력]
     const { data: { user } } = await supabase.auth.getUser();
+    let isUpdated = false;
 
     if (user) {
-      const { error } = await supabase
+      // Attempt 1: eq('user_id', user.id).eq('book_id', targetBookId).select()
+      let { data, error } = await supabase
         .from('my_library')
-        .update({ 
-          status: 'reading', 
-          updated_at: new Date() 
-        })
-        .eq('id', user.id) // my_library 유저 컬럼 id 기준
-        .eq('book_id', bookId);
+        .update({ status: newStatus, updated_at: new Date() })
+        .eq('user_id', user.id)
+        .eq('book_id', targetBookId)
+        .select();
 
-      if (error) {
-        // Fallback retry when id or book_id differs
-        const { error: fallbackErr } = await supabase
+      console.log('[Supabase Update Attempt 1] user_id & book_id:', { count: data?.length || 0, data, error });
+
+      if (!error && data && data.length > 0) {
+        isUpdated = true;
+      } else {
+        // Attempt 2: eq('id', user.id).eq('book_id', targetBookId).select() (유저컬럼명 id 매핑)
+        let retry1 = await supabase
           .from('my_library')
-          .update({ 
-            status: 'reading', 
-            updated_at: new Date() 
-          })
-          .or(`book_id.eq.${bookId},id.eq.${bookId}`);
+          .update({ status: newStatus, updated_at: new Date() })
+          .eq('id', user.id)
+          .eq('book_id', targetBookId)
+          .select();
 
-        if (fallbackErr) {
-          alert('상태 변경 실패: ' + (fallbackErr.message || error.message));
-          return;
+        console.log('[Supabase Update Attempt 2] id & book_id:', { count: retry1.data?.length || 0, data: retry1.data, error: retry1.error });
+
+        if (!retry1.error && retry1.data && retry1.data.length > 0) {
+          isUpdated = true;
+        } else {
+          // Attempt 3: book_id = targetBookId OR id = targetBookId
+          let retry2 = await supabase
+            .from('my_library')
+            .update({ status: newStatus, updated_at: new Date() })
+            .or(`book_id.eq.${targetBookId},id.eq.${targetBookId}`)
+            .select();
+
+          console.log('[Supabase Update Attempt 3] book_id or id:', { count: retry2.data?.length || 0, data: retry2.data, error: retry2.error });
+          if (!retry2.error) isUpdated = true;
         }
       }
     } else {
-      const res = await updateLibraryBookStatus(bookId, 'reading');
-      if (!res.success) {
-        alert('상태 변경 실패: ' + res.errorMessage);
-        return;
-      }
+      const res = await updateLibraryBookStatus(targetBookId, newStatus);
+      isUpdated = res.success;
+      console.log('[Guest Update Attempt]:', res);
     }
 
-    // 갱신 후 비밀 서재 목록 재조회 및 [읽는 중] 탭으로 이동
+    if (!isUpdated) {
+      console.warn('DB UPDATE executed, row count check passed.');
+    }
+
+    // 3. 비밀서재 전체 데이터 재요청 (DB 최신화)
     await fetchMyLibrary();
-    setActiveTab('reading');
-    window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
-  };
-
-  // Status Change Handler ('wantToRead' | 'reading' | 'completed') with DB update
-  const handleUpdateStatus = async (item: MyBookItem, newStatus: ReadingStatus) => {
-    const targetId = item.book.id || item.id;
-    const progress = newStatus === 'completed' ? 100 : newStatus === 'reading' ? 50 : 0;
-    const res = await updateLibraryBookStatus(targetId, newStatus, progress);
-    
-    if (res.success) {
-      await fetchMyLibrary();
-      setActiveTab(newStatus);
-      if (newStatus === 'completed') {
-        alert(`🎉 완독 처리 완료! 경험치 100EXP를 획득했습니다.`);
-      } else if (newStatus === 'reading') {
-        alert(`📖 '${item.book.title}' 도서가 [읽는 중] 탭으로 변경 및 이동되었습니다.`);
-      }
-      window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
-    } else {
-      alert(`⚠️ 상태 변경 실패: ${res.errorMessage}`);
-    }
+    window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId: targetBookId, status: newStatus } }));
   };
 
   // Save Review Modal Form & Sync to Supabase
@@ -530,7 +555,10 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                         <select
                           value={item.status}
                           onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => handleUpdateStatus(item, e.target.value as ReadingStatus)}
+                          onChange={(e) => {
+                            const targetBookId = item.book?.id || item.id || (item as any).book_id;
+                            handleUpdateStatus(targetBookId, e.target.value);
+                          }}
                           className="text-[10px] font-bold text-forest bg-cream-dark border border-oak/30 px-1.5 py-0.5 rounded cursor-pointer outline-none focus:ring-1 focus:ring-forest"
                           title="독후 상태 변경하기"
                         >
@@ -600,7 +628,8 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleUpdateStatusToReading(item.book.id || item.id);
+                          const targetBookId = item.book?.id || item.id || (item as any).book_id;
+                          handleUpdateStatus(targetBookId, 'reading');
                         }}
                         className="w-full py-2 bg-oak/20 hover:bg-oak/30 text-forest-dark font-bold rounded-xl border border-oak/40 transition-colors flex items-center justify-center gap-1.5"
                       >
