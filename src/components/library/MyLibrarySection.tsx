@@ -118,14 +118,25 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
   useEffect(() => {
     loadLibraryData();
 
-    const handleLibraryUpdate = () => {
-      console.log('[MyLibrarySection] Real-time library update triggered');
-      loadLibraryData();
+    const handleLibraryUpdate = (e?: any) => {
+      console.log('[MyLibrarySection] Real-time library update triggered', e?.detail);
+      loadLibraryData().then(() => {
+        if (e?.detail?.status) {
+          const s = String(e.detail.status).toLowerCase();
+          if (s.includes('read') && !s.includes('to')) {
+            setActiveTab('reading');
+          } else if (s.includes('complete')) {
+            setActiveTab('completed');
+          } else if (s.includes('want') || s.includes('to_read')) {
+            setActiveTab('wantToRead');
+          }
+        }
+      });
     };
 
-    window.addEventListener('bookfit_library_updated', handleLibraryUpdate);
+    window.addEventListener('bookfit_library_updated', handleLibraryUpdate as EventListener);
     return () => {
-      window.removeEventListener('bookfit_library_updated', handleLibraryUpdate);
+      window.removeEventListener('bookfit_library_updated', handleLibraryUpdate as EventListener);
     };
   }, []);
 
@@ -175,6 +186,52 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     }
   };
 
+  const fetchMyLibrary = async () => {
+    await loadLibraryData();
+  };
+
+  const handleUpdateStatusToReading = async (bookId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user) {
+      const { error } = await supabase
+        .from('my_library')
+        .update({ 
+          status: 'reading', 
+          updated_at: new Date() 
+        })
+        .eq('id', user.id) // my_library 유저 컬럼 id 기준
+        .eq('book_id', bookId);
+
+      if (error) {
+        // Fallback retry when id or book_id differs
+        const { error: fallbackErr } = await supabase
+          .from('my_library')
+          .update({ 
+            status: 'reading', 
+            updated_at: new Date() 
+          })
+          .or(`book_id.eq.${bookId},id.eq.${bookId}`);
+
+        if (fallbackErr) {
+          alert('상태 변경 실패: ' + (fallbackErr.message || error.message));
+          return;
+        }
+      }
+    } else {
+      const res = await updateLibraryBookStatus(bookId, 'reading');
+      if (!res.success) {
+        alert('상태 변경 실패: ' + res.errorMessage);
+        return;
+      }
+    }
+
+    // 갱신 후 비밀 서재 목록 재조회 및 [읽는 중] 탭으로 이동
+    await fetchMyLibrary();
+    setActiveTab('reading');
+    window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
+  };
+
   // Status Change Handler ('wantToRead' | 'reading' | 'completed') with DB update
   const handleUpdateStatus = async (item: MyBookItem, newStatus: ReadingStatus) => {
     const targetId = item.book.id || item.id;
@@ -182,7 +239,7 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     const res = await updateLibraryBookStatus(targetId, newStatus, progress);
     
     if (res.success) {
-      await loadLibraryData();
+      await fetchMyLibrary();
       setActiveTab(newStatus);
       if (newStatus === 'completed') {
         alert(`🎉 완독 처리 완료! 경험치 100EXP를 획득했습니다.`);
@@ -453,23 +510,35 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                 >
                   <div className="space-y-4">
                     
-                    {/* Top Status Badge & Status Selector */}
+                    {/* Top Status Badge & Dynamic Badge Tag / Status Selector */}
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-oak-dark bg-oak/15 px-2.5 py-0.5 rounded">
                         {book.lexileLevel}
                       </span>
 
-                      <select
-                        value={item.status}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => handleUpdateStatus(item, e.target.value as ReadingStatus)}
-                        className="text-[10px] font-bold text-forest bg-cream-dark border border-oak/30 px-2 py-0.5 rounded cursor-pointer outline-none focus:ring-1 focus:ring-forest"
-                        title="독후 상태 변경하기"
-                      >
-                        <option value="reading">📖 읽는 중</option>
-                        <option value="wantToRead">📌 읽을 책</option>
-                        <option value="completed">🎉 완독 완료</option>
-                      </select>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${
+                          isWantToRead(item.status)
+                            ? 'bg-amber-100 text-amber-800 border-amber-300'
+                            : isReading(item.status)
+                            ? 'bg-blue-100 text-blue-800 border-blue-300'
+                            : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        }`}>
+                          {isWantToRead(item.status) ? '📌 읽을 책' : isReading(item.status) ? '📖 읽는 중' : '🎉 완독 완료'}
+                        </span>
+
+                        <select
+                          value={item.status}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => handleUpdateStatus(item, e.target.value as ReadingStatus)}
+                          className="text-[10px] font-bold text-forest bg-cream-dark border border-oak/30 px-1.5 py-0.5 rounded cursor-pointer outline-none focus:ring-1 focus:ring-forest"
+                          title="독후 상태 변경하기"
+                        >
+                          <option value="wantToRead">📌 읽을 책</option>
+                          <option value="reading">📖 읽는 중</option>
+                          <option value="completed">🎉 완독 완료</option>
+                        </select>
+                      </div>
                     </div>
 
                     {/* Book Cover Image & Meta */}
@@ -531,8 +600,7 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleUpdateStatus(item, 'reading');
-                          setActiveTab('reading');
+                          handleUpdateStatusToReading(item.book.id || item.id);
                         }}
                         className="w-full py-2 bg-oak/20 hover:bg-oak/30 text-forest-dark font-bold rounded-xl border border-oak/40 transition-colors flex items-center justify-center gap-1.5"
                       >

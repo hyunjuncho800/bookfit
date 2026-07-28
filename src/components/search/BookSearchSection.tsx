@@ -195,9 +195,18 @@ export const BookSearchSection: React.FC<BookSearchSectionProps> = ({ onSelectBo
     }
   };
 
-  // 3. 페이지 마운트 및 검색어/필터 변경 시 자동 실행
+  // 3. 페이지 마운트, 검색어/필터 변경 및 서재 업데이트 이벤트 수신 시 자동 실행
   useEffect(() => {
     loadBooks();
+
+    const handleLibraryUpdate = () => {
+      loadBooks();
+    };
+
+    window.addEventListener('bookfit_library_updated', handleLibraryUpdate);
+    return () => {
+      window.removeEventListener('bookfit_library_updated', handleLibraryUpdate);
+    };
   }, [searchTerm, selectedTag, selectedLevel]);
 
   const toggleSaveBook = (bookId: string, e: React.MouseEvent) => {

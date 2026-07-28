@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Book, AIGeneratedGuide } from '../types';
 import { generateBookGuide } from '../services/aiGuideGenerator';
-import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb, updateLibraryBookStatus } from '../services/supabaseService';
+import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb, updateLibraryBookStatus, supabase } from '../services/supabaseService';
 import { getGuestLibraryBooks, saveGuestLibraryBook, removeGuestLibraryBook } from '../services/authService';
 import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, ShoppingBag, Brain, Loader2, Trash2 } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
@@ -30,6 +30,48 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
     if (s.includes('complete') || s.includes('완독')) return 'completed';
     if (s.includes('read') && !s.includes('to')) return 'reading';
     return 'to_read';
+  };
+
+  const handleCloseModal = () => {
+    window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
+    onClose();
+  };
+
+  // 모달 내 상태 변경 및 서재 갱신 (Supabase DB UPDATE & 실시간 목록 재조회)
+  const handleStatusChange = async (newStatus: 'to_read' | 'reading' | 'completed' | string) => {
+    if (!book) return;
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const dbStatus = newStatus === 'to_read' ? 'wantToRead' : newStatus;
+
+    if (user) {
+      const { error } = await supabase
+        .from('my_library')
+        .update({ 
+          status: dbStatus, 
+          updated_at: new Date() 
+        })
+        .eq('user_id', user.id) // my_library 유저 컬럼 id 기준
+        .eq('book_id', book.id);
+
+      if (error) {
+        // Fallback update
+        await updateLibraryBookStatus(book.id, dbStatus as any);
+      }
+    } else {
+      await updateLibraryBookStatus(book.id, dbStatus as any);
+    }
+
+    const norm = getNormalizedStatus(dbStatus);
+    setCurrentBookStatus(norm);
+    if (norm === 'to_read') setActiveGuideStage('before');
+    else if (norm === 'reading') setActiveGuideStage('during');
+    else if (norm === 'completed') setActiveGuideStage('after');
+
+    alert(`📖 '${book.title}' 도서가 [${norm === 'reading' ? '읽는 중' : norm === 'completed' ? '완독 완료' : '읽을 책'}] 탭으로 변경되었습니다!`);
+
+    // 부모 서재 페이지 실시간 목록 재조회 이벤트 발송
+    window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: dbStatus } }));
   };
 
   // 1. Dynamic Check if book is already in My Library (DB or localStorage)
@@ -150,20 +192,6 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
     setSelectedQuizAnswers((prev) => ({ ...prev, [qIdx]: optIdx }));
   };
 
-  // Change status from to_read to reading
-  const handleUpdateStatusToReading = async () => {
-    if (!book) return;
-    const res = await updateLibraryBookStatus(book.id, 'reading', 30);
-    if (res.success) {
-      setCurrentBookStatus('reading');
-      setActiveGuideStage('during');
-      alert(`📖 '${book.title}' 도서가 [읽는 중] 탭으로 이동되었습니다!`);
-      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'reading' } }));
-    } else {
-      alert(`⚠️ 상태 변경 실패: ${res.errorMessage}`);
-    }
-  };
-
   // Complete Quiz handler
   const handleQuizCompleteInModal = async (_score: number, exp: number) => {
     if (!book) return;
@@ -216,7 +244,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/70 backdrop-blur-md animate-fadeIn"
-      onClick={onClose}
+      onClick={handleCloseModal}
     >
       {/* Modal Container */}
       <div
@@ -249,7 +277,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
               <Heart className={`w-5 h-5 ${isSaved ? 'fill-red-400 text-red-400' : ''}`} />
             </button>
             <button
-              onClick={onClose}
+              onClick={handleCloseModal}
               className="p-2 text-cream-card hover:text-white rounded-full hover:bg-forest-light transition-colors"
               title="닫기 (Esc)"
             >
@@ -396,11 +424,14 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
 
                 <div className="grid sm:grid-cols-3 gap-4">
                   {/* Before */}
-                  <div className={`p-4 rounded-2xl transition-all space-y-2 border-2 ${
-                    activeGuideStage === 'before'
-                      ? 'bg-forest/10 border-forest shadow-md scale-102 ring-2 ring-forest/30'
-                      : 'bg-[#FAF5EB] border-oak/30 opacity-80 hover:opacity-100'
-                  }`}>
+                  <div
+                    onClick={() => handleStatusChange('wantToRead')}
+                    className={`p-4 rounded-2xl transition-all space-y-2 border-2 cursor-pointer ${
+                      activeGuideStage === 'before'
+                        ? 'bg-forest/10 border-forest shadow-md scale-102 ring-2 ring-forest/30'
+                        : 'bg-[#FAF5EB] border-oak/30 opacity-80 hover:opacity-100'
+                    }`}
+                  >
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-bold text-forest bg-forest/20 px-2.5 py-0.5 rounded-full inline-block">
                         1. 읽기 전 (Before)
@@ -415,11 +446,14 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                   </div>
 
                   {/* During */}
-                  <div className={`p-4 rounded-2xl transition-all space-y-2 border-2 ${
-                    activeGuideStage === 'during'
-                      ? 'bg-oak/20 border-oak-dark shadow-md scale-102 ring-2 ring-oak/40'
-                      : 'bg-[#FAF5EB] border-oak/30 opacity-80 hover:opacity-100'
-                  }`}>
+                  <div
+                    onClick={() => handleStatusChange('reading')}
+                    className={`p-4 rounded-2xl transition-all space-y-2 border-2 cursor-pointer ${
+                      activeGuideStage === 'during'
+                        ? 'bg-oak/20 border-oak-dark shadow-md scale-102 ring-2 ring-oak/40'
+                        : 'bg-[#FAF5EB] border-oak/30 opacity-80 hover:opacity-100'
+                    }`}
+                  >
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-bold text-oak-dark bg-oak/30 px-2.5 py-0.5 rounded-full inline-block">
                         2. 읽는 중 (During)
@@ -434,11 +468,14 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                   </div>
 
                   {/* After */}
-                  <div className={`p-4 rounded-2xl transition-all space-y-2 border-2 ${
-                    activeGuideStage === 'after'
-                      ? 'bg-charcoal/10 border-charcoal shadow-md scale-102 ring-2 ring-charcoal/20'
-                      : 'bg-[#FAF5EB] border-oak/30 opacity-80 hover:opacity-100'
-                  }`}>
+                  <div
+                    onClick={() => handleStatusChange('completed')}
+                    className={`p-4 rounded-2xl transition-all space-y-2 border-2 cursor-pointer ${
+                      activeGuideStage === 'after'
+                        ? 'bg-charcoal/10 border-charcoal shadow-md scale-102 ring-2 ring-charcoal/20'
+                        : 'bg-[#FAF5EB] border-oak/30 opacity-80 hover:opacity-100'
+                    }`}
+                  >
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-bold text-charcoal bg-charcoal/20 px-2.5 py-0.5 rounded-full inline-block">
                         3. 읽은 후 (After)
@@ -562,7 +599,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                 <>
                   {currentBookStatus === 'to_read' && (
                     <button
-                      onClick={handleUpdateStatusToReading}
+                      onClick={() => handleStatusChange('reading')}
                       className="px-4 py-2.5 bg-forest hover:bg-forest-dark text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <BookOpen className="w-4 h-4 text-oak" />
