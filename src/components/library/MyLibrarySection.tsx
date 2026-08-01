@@ -19,40 +19,13 @@ interface MyLibrarySectionProps {
   onOpenDiagnosis: () => void;
 }
 
-// Initial Mock User Library Items (Unused, initialized to clean empty array for new users)
-
-const INITIAL_PROFILE: UserGamificationProfile = {
-  childName: '우리 아이',
-  levelBadgeTitle: '어휘 Level 3 - 꼬마 탐정 🕵️‍♂️',
-  currentExp: 470,
-  nextLevelExp: 500,
-  completedCountThisMonth: 8,
-  earnedBadges: [
-    { id: 'b1', icon: '🏆', name: '다독왕', description: '한 달 5권 이상 완독 달성' },
-    { id: 'b2', icon: '📚', name: '어휘 수집가', description: '새로운 낱말 20개 습득' },
-    { id: 'b3', icon: '💡', name: '사고력 대장', description: '추론 질문 10회 답변 완료' },
-    { id: 'b4', icon: '⭐', name: '독서 탐정', description: '3-Step 큐레이션 서가 도서 완독' }
-  ]
-};
-
-// Helper status matchers (multi-format tolerant)
-const isReading = (status: string) => {
-  const s = String(status || '').toLowerCase();
-  return s.includes('reading') || (s.includes('read') && !s.includes('want') && !s.includes('to_read') && !s.includes('completed'));
-};
-
-const isWantToRead = (status: string) => {
-  const s = String(status || '').toLowerCase();
-  return s.includes('want') || s.includes('to_read') || s.includes('toread') || s.includes('unread');
-};
-
-const isCompleted = (status: string) => {
-  const s = String(status || '').toLowerCase();
-  return s.includes('complete') || s.includes('완독');
-};
+// Helper status matchers (standardized status values)
+const isReading = (status: string) => status === 'reading';
+const isWantToRead = (status: string) => status === 'to_read';
+const isCompleted = (status: string) => status === 'completed';
 
 export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook, onOpenDiagnosis }) => {
-  const [activeTab, setActiveTab] = useState<ReadingStatus>('wantToRead');
+  const [activeTab, setActiveTab] = useState<ReadingStatus>('to_read');
   const [myBooks, setMyBooks] = useState<MyBookItem[]>([]);
   const [profile, setProfile] = useState<UserGamificationProfile>({
     ...INITIAL_PROFILE,
@@ -134,12 +107,12 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
       loadLibraryData().then(() => {
         if (e?.detail?.status) {
           const s = String(e.detail.status).toLowerCase();
-          if (s.includes('read') && !s.includes('to')) {
-            setActiveTab('reading');
-          } else if (s.includes('complete')) {
+          if (s.includes('complete') || s.includes('완독')) {
             setActiveTab('completed');
-          } else if (s.includes('want') || s.includes('to_read')) {
-            setActiveTab('wantToRead');
+          } else if (s.includes('reading') || (s.includes('read') && !s.includes('to') && !s.includes('want'))) {
+            setActiveTab('reading');
+          } else {
+            setActiveTab('to_read');
           }
         }
       });
@@ -151,16 +124,11 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
     };
   }, []);
 
-  // Filter books by active status tab with multi-status compatibility
-  const filteredMyBooks = myBooks.filter((item) => {
-    if (activeTab === 'wantToRead') return isWantToRead(item.status);
-    if (activeTab === 'reading') return isReading(item.status);
-    if (activeTab === 'completed') return isCompleted(item.status);
-    return true;
-  });
+  // Filter books by active status tab
+  const filteredMyBooks = myBooks.filter((item) => item.status === activeTab);
 
   // Completed Count
-  const completedBooksCount = myBooks.filter((b) => isCompleted(b.status)).length;
+  const completedBooksCount = myBooks.filter((b) => b.status === 'completed').length;
   const isLevelUpEligible = completedBooksCount >= 3;
 
   // Trigger 3-Step Mini Quiz Modal on Complete click
@@ -175,104 +143,57 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
 
     const targetId = quizTargetBook.id;
 
-    // 1. Optimistic UI: 로컬 state status를 즉시 'completed'로 변경
-    setMyBooks((prev) =>
-      prev.map((b) => {
-        const bId = String(b.book?.id || b.id || (b as any).book_id);
-        if (bId === String(targetId) || String(b.id) === String(targetId)) {
-          return { ...b, status: 'completed' as any, progressPercent: 100 };
-        }
-        return b;
-      })
-    );
-
-    // 2. DB status를 'completed'로 신규/갱신 저장 (절대 to_read로 저장되지 않음!)
-    const saveRes = await saveOrUpdateLibraryBook(quizTargetBook, 'completed', 100);
-    console.log('[handleQuizSubmitted saveOrUpdateResult]:', saveRes);
-
-    if (!saveRes.success) {
-      await updateLibraryBookStatus(targetId, 'completed', 100);
-    }
-
     setProfile((prev) => ({
       ...prev,
       currentExp: Math.min(prev.nextLevelExp, prev.currentExp + exp),
       completedCountThisMonth: prev.completedCountThisMonth + 1,
     }));
 
-    // 3. 서재 탭을 [🥳 완독한 책]으로 바로 자동 이동
-    setActiveTab('completed');
     setQuizTargetBook(null);
 
     setShowCelebration(true);
     setTimeout(() => setShowCelebration(false), 4000);
 
-    // 4. 비밀서재 목록 재조회 (fetchMyLibrary) & 전역 이벤트 발생
-    await fetchMyLibrary();
-    window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId: targetId, status: 'completed' } }));
+    // 통합 상태 업데이트 함수(handleStatusUpdate) 실행: DB status 업데이트, Optimistic UI, 'completed' 탭 자동 이동 & fetchMyLibrary()
+    await handleStatusUpdate(targetId, 'completed');
   };
 
   const fetchMyLibrary = async () => {
     await loadLibraryData();
   };
 
-  // 통합 상태 업데이트 함수: DB status 업데이트, 서재 목록 리패치(fetchMyLibrary) & 해당 탭 자동 이동(setActiveTab)
-  const handleUpdateBookStatus = async (bookId: string, targetStatus: ReadingStatus | string, itemObj?: any) => {
-    console.log(`[handleUpdateBookStatus] bookId: ${bookId}, targetStatus: ${targetStatus}`);
+  // 비밀서재 메인 컴포넌트 통합 상태 업데이트 핸들러 (to_read -> reading -> completed 흐름 보장)
+  const handleStatusUpdate = async (bookId: string, nextStatus: ReadingStatus | string) => {
+    console.log("=== [1단계] 상태 변경 시도 시작 ===");
+    console.log("전달받은 bookId:", bookId, "targetStatus:", nextStatus);
 
-    const targetItem = itemObj || myBooks.find((b) => String(b.book?.id || b.id || (b as any).book_id) === String(bookId));
-    const bookData = targetItem?.book || targetItem || { id: bookId, title: '도서' };
-
-    // 1. 해당 탭으로 즉시 전환 및 Optimistic UI 반영
-    const normTab: ReadingStatus = isReading(targetStatus) ? 'reading' : isCompleted(targetStatus) ? 'completed' : 'wantToRead';
-    setActiveTab(normTab);
-
-    setMyBooks((prev) =>
-      prev.map((item) => {
-        const bId = String(item.book?.id || item.id || (item as any).book_id);
-        if (bId === String(bookId) || String(item.id) === String(bookId)) {
-          return { ...item, status: normTab as any };
-        }
-        return item;
-      })
-    );
-
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      alert("로그인이 필요합니다.");
-      return;
+    const s = String(nextStatus || '').toLowerCase();
+    let normStatus: ReadingStatus = 'to_read';
+    if (s.includes('complete') || s.includes('완독')) {
+      normStatus = 'completed';
+    } else if (s.includes('reading') || (s.includes('read') && !s.includes('to') && !s.includes('want'))) {
+      normStatus = 'reading';
+    } else {
+      normStatus = 'to_read';
     }
 
-    // 1. DB status 업데이트
-    let { data, error } = await supabase
-      .from('my_library')
-      .update({ 
-        status: normTab, 
-        updated_at: new Date().toISOString() 
-      })
-      .or(`id.eq.${user.id},user_id.eq.${user.id}`)
-      .or(`book_id.eq.${String(bookId)},id.eq.${String(bookId)}`)
-      .select();
+    // DB update: status 파라미터 외 불필요한 필드 제거, { status, updated_at }만 정확히 전송
+    const updateRes = await updateLibraryBookStatus(bookId, normStatus);
 
-    console.log("DB 업데이트 시도 결과:", data, error);
-
-    if (error || !data || data.length === 0) {
-      // Fallback: saveOrUpdateLibraryBook으로 DB 저장/업데이트
-      if (bookData) {
-        const saveRes = await saveOrUpdateLibraryBook(bookData, normTab);
-        console.log("[saveOrUpdateLibraryBook Fallback Result]:", saveRes);
-      }
+    if (!updateRes.success) {
+      const targetItem = myBooks.find((b) => String(b.book?.id || b.id || (b as any).book_id) === String(bookId));
+      const bookData = targetItem?.book || targetItem || { id: bookId, title: '도서' };
+      await saveOrUpdateLibraryBook(bookData, normStatus);
     }
 
-    // 2. 해당 탭으로 전환 확정 및 목록 리패치
-    setActiveTab(normTab);
+    // 성공 시 즉시 setActiveTab 실행하여 해당 탭으로 자동 이동
+    setActiveTab(normStatus);
+
+    // await fetchMyLibrary() 호출하여 해당 탭 목록 실시간 반영
     await fetchMyLibrary();
-    window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId, status: normTab } }));
-  };
 
-  const handleUpdateStatus = async (targetBookId: string, newStatus: ReadingStatus | string, itemObj?: any) => {
-    await handleUpdateBookStatus(targetBookId, newStatus, itemObj);
+    // 전역 이벤트 발행
+    window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId, status: normStatus } }));
   };
 
   // Save Review Modal Form & Sync to Supabase
@@ -436,14 +357,14 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-cream-dark pb-4">
           <div className="flex items-center gap-2 text-xs sm:text-sm font-bold">
             <button
-              onClick={() => setActiveTab('wantToRead')}
+              onClick={() => setActiveTab('to_read')}
               className={`px-4 py-2.5 rounded-xl transition-all ${
-                activeTab === 'wantToRead'
+                activeTab === 'to_read'
                   ? 'bg-forest text-white shadow-sm'
                   : 'bg-cream-light text-charcoal hover:bg-cream-card border border-oak/20'
               }`}
             >
-              📌 읽을 책 ({myBooks.filter((b) => isWantToRead(b.status)).length})
+              📌 읽을 책 ({myBooks.filter((b) => b.status === 'to_read').length})
             </button>
             <button
               onClick={() => setActiveTab('reading')}
@@ -453,7 +374,7 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                   : 'bg-cream-light text-charcoal hover:bg-cream-card border border-oak/20'
               }`}
             >
-              📖 읽는 중 ({myBooks.filter((b) => isReading(b.status)).length})
+              📖 읽는 중 ({myBooks.filter((b) => b.status === 'reading').length})
             </button>
             <button
               onClick={() => setActiveTab('completed')}
@@ -463,7 +384,7 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                   : 'bg-cream-light text-charcoal hover:bg-cream-card border border-oak/20'
               }`}
             >
-              🥳 완독한 책 ({myBooks.filter((b) => isCompleted(b.status)).length})
+              🥳 완독한 책 ({myBooks.filter((b) => b.status === 'completed').length})
             </button>
           </div>
 
@@ -541,13 +462,13 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
 
                       <div className="flex items-center gap-1.5">
                         <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${
-                          isWantToRead(item.status)
+                          item.status === 'to_read'
                             ? 'bg-amber-100 text-amber-800 border-amber-300'
-                            : isReading(item.status)
+                            : item.status === 'reading'
                             ? 'bg-blue-100 text-blue-800 border-blue-300'
                             : 'bg-emerald-100 text-emerald-800 border-emerald-300'
                         }`}>
-                          {isWantToRead(item.status) ? '📌 읽을 책' : isReading(item.status) ? '📖 읽는 중' : '🎉 완독 완료'}
+                          {item.status === 'to_read' ? '📌 읽을 책' : item.status === 'reading' ? '📖 읽는 중' : '🎉 완독 완료'}
                         </span>
 
                         <select
@@ -555,12 +476,12 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
                           onClick={(e) => e.stopPropagation()}
                           onChange={(e) => {
                             const targetBookId = item.book?.id || item.id || (item as any).book_id;
-                            handleUpdateStatus(targetBookId, e.target.value);
+                            handleStatusUpdate(targetBookId, e.target.value);
                           }}
                           className="text-[10px] font-bold text-forest bg-cream-dark border border-oak/30 px-1.5 py-0.5 rounded cursor-pointer outline-none focus:ring-1 focus:ring-forest"
                           title="독후 상태 변경하기"
                         >
-                          <option value="wantToRead">📌 읽을 책</option>
+                          <option value="to_read">📌 읽을 책</option>
                           <option value="reading">📖 읽는 중</option>
                           <option value="completed">🎉 완독 완료</option>
                         </select>
@@ -622,19 +543,19 @@ export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook
 
                   {/* Bottom Actions based on Reading Status */}
                   <div className="mt-4 pt-3 border-t border-cream-dark flex items-center justify-between text-xs">
-                    {isWantToRead(item.status) ? (
+                    {item.status === 'to_read' ? (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           const targetBookId = item.book?.id || item.id || (item as any).book_id;
-                          handleUpdateStatus(targetBookId, 'reading');
+                          handleStatusUpdate(targetBookId, 'reading');
                         }}
                         className="w-full py-2 bg-oak/20 hover:bg-oak/30 text-forest-dark font-bold rounded-xl border border-oak/40 transition-colors flex items-center justify-center gap-1.5"
                       >
                         <BookOpen className="w-4 h-4 text-forest" />
                         <span>📖 읽는 중으로 변경</span>
                       </button>
-                    ) : isReading(item.status) ? (
+                    ) : item.status === 'reading' ? (
                       <button
                         onClick={(e) => handleCompleteBook(item, e)}
                         className="w-full py-2 bg-forest hover:bg-forest-dark text-white font-bold rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5"

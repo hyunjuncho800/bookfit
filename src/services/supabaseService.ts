@@ -151,14 +151,14 @@ export async function fetchMyLibraryFromDb(): Promise<MyBookItem[]> {
         rating: item.book_rating || item.rating || 5,
       };
 
-      const rawStatus = String(item.status || 'reading').toLowerCase();
-      let normStatus: ReadingStatus = 'reading';
-      if (rawStatus.includes('to_read') || rawStatus.includes('wanttoread') || rawStatus.includes('unread')) {
-        normStatus = 'wantToRead';
-      } else if (rawStatus.includes('complete')) {
+      const rawStatus = String(item.status || 'to_read').toLowerCase();
+      let normStatus: ReadingStatus = 'to_read';
+      if (rawStatus.includes('complete') || rawStatus.includes('완독')) {
         normStatus = 'completed';
-      } else {
+      } else if (rawStatus.includes('reading') || (rawStatus.includes('read') && !rawStatus.includes('to') && !rawStatus.includes('want'))) {
         normStatus = 'reading';
+      } else {
+        normStatus = 'to_read';
       }
 
       return {
@@ -180,7 +180,7 @@ export async function fetchMyLibraryFromDb(): Promise<MyBookItem[]> {
 
 export async function saveOrUpdateLibraryBook(
   item: Book | any,
-  status: ReadingStatus = 'wantToRead',
+  status: ReadingStatus = 'to_read',
   progressPercent: number = 0,
   oneLineReview?: string,
   rating?: number
@@ -301,26 +301,51 @@ export const isValidUUID = (str: string): boolean => {
 
 export async function updateLibraryBookStatus(
   bookId: string,
-  status: ReadingStatus | string,
-  _progressPercent?: number
+  status: ReadingStatus | string
 ): Promise<{ success: boolean; errorMessage?: string }> {
   try {
+    const raw = String(status || '').toLowerCase();
+    let normStatus: ReadingStatus = 'to_read';
+    if (raw.includes('complete') || raw.includes('완독')) {
+      normStatus = 'completed';
+    } else if (raw.includes('reading') || (raw.includes('read') && !raw.includes('to') && !raw.includes('want'))) {
+      normStatus = 'reading';
+    } else {
+      normStatus = 'to_read';
+    }
+
     const updatePayload = {
-      status,
+      status: normStatus,
       updated_at: new Date().toISOString(),
     };
 
-    if (isValidUUID(bookId)) {
-      let { error } = await supabase
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id;
+
+    let query = supabase.from('my_library').update(updatePayload);
+    if (userId) {
+      query = query.or(`user_id.eq.${userId},id.eq.${userId}`);
+    }
+
+    const { data, error } = await query
+      .or(`book_id.eq.${String(bookId)},id.eq.${String(bookId)}`)
+      .select();
+
+    if (error) {
+      console.warn('Primary updateLibraryBookStatus failed:', error.message);
+    }
+
+    if (!data || data.length === 0) {
+      // Fallback by book_id direct eq
+      const fallbackRes = await supabase
         .from('my_library')
         .update(updatePayload)
-        .or(`book_id.eq.${bookId},id.eq.${bookId}`);
+        .eq('book_id', String(bookId))
+        .select();
 
-      if (error) {
-        console.warn('Update with UUID failed:', error.message);
+      if (fallbackRes.error) {
+        console.error('Fallback updateLibraryBookStatus failed:', fallbackRes.error.message);
       }
-    } else {
-      console.log(`[updateLibraryBookStatus] Non-UUID bookId: "${bookId}". Bypassing Postgres UUID filter.`);
     }
 
     return { success: true };
@@ -402,7 +427,7 @@ export async function saveCuratedBookToDb(
     // Save to my_library
     const res = await saveOrUpdateLibraryBook(
       { ...book, trackType },
-      'wantToRead'
+      'to_read'
     );
 
     if (!res.success) {
@@ -500,7 +525,7 @@ export async function saveBatchCuratedBooksToDb(
     for (const book of books) {
       const res = await saveOrUpdateLibraryBook(
         { ...book, trackType: book.trackType || defaultTrack },
-        'wantToRead'
+        'to_read'
       );
       if (res.success) {
         successCount++;

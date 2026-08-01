@@ -1,5 +1,5 @@
 import { supabase } from './supabaseService';
-import type { DiagnosticResultData, MyBookItem } from '../types';
+import type { DiagnosticResultData, MyBookItem, ReadingStatus } from '../types';
 
 const GUEST_DIAGNOSTIC_KEY = 'bookfit_guest_diagnostic_result';
 const GUEST_LIBRARY_KEY = 'bookfit_guest_library_books';
@@ -56,7 +56,18 @@ export const saveGuestLibraryBook = (item: MyBookItem): MyBookItem[] => {
 export const getGuestLibraryBooks = (): MyBookItem[] => {
   try {
     const raw = localStorage.getItem(GUEST_LIBRARY_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const list: MyBookItem[] = raw ? JSON.parse(raw) : [];
+    return list.map((item) => {
+      const s = String(item.status || 'to_read').toLowerCase();
+      let normStatus: ReadingStatus = 'to_read';
+      if (s.includes('complete') || s.includes('완독')) normStatus = 'completed';
+      else if (s.includes('reading') || (s.includes('read') && !s.includes('to') && !s.includes('want'))) normStatus = 'reading';
+      else normStatus = 'to_read';
+      return {
+        ...item,
+        status: normStatus
+      };
+    });
   } catch (e) {
     console.error('Failed to get guest library books:', e);
     return [];

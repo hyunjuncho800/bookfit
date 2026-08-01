@@ -3,7 +3,7 @@ import type { Book, AIGeneratedGuide } from '../types';
 import { generateBookGuide } from '../services/aiGuideGenerator';
 import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb, updateLibraryBookStatus, supabase } from '../services/supabaseService';
 import { getGuestLibraryBooks, saveGuestLibraryBook, removeGuestLibraryBook } from '../services/authService';
-import { X, Star, BookOpen, Heart, ExternalLink, HelpCircle, Sparkles, CheckCircle2, ShoppingBag, Brain, Loader2, Trash2 } from 'lucide-react';
+import { X, Star, BookOpen, HelpCircle, Sparkles, CheckCircle2, ShoppingBag, ExternalLink, Trash2 } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
 import { getCoupangSearchLink } from '../utils/linkUtils';
 import { BookQuizModal } from './library/BookQuizModal';
@@ -12,70 +12,60 @@ interface BookDetailModalProps {
   book: Book & { partnerUrl?: string } | null;
   onClose: () => void;
   onOpenDiagnosis: () => void;
+  onStatusUpdate?: (bookId: string, nextStatus: string) => Promise<void>;
 }
 
-export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose, onOpenDiagnosis: _onOpenDiagnosis }) => {
+export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose, onOpenDiagnosis: _onOpenDiagnosis, onStatusUpdate }) => {
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [currentBookStatus, setCurrentBookStatus] = useState<'to_read' | 'reading' | 'completed' | 'none'>('none');
   const [activeGuideStage, setActiveGuideStage] = useState<'before' | 'during' | 'after'>('before');
-  const [activeTab, setActiveTab] = useState<'questions' | 'quiz' | 'vocab'>('questions');
-  const [aiGuide, setAiGuide] = useState<AIGeneratedGuide | null>(null);
-  const [isLoadingAI, setIsLoadingAI] = useState<boolean>(false);
-  const [selectedQuizAnswers, setSelectedQuizAnswers] = useState<Record<number, number>>({});
+  const [_activeTab, _setActiveTab] = useState<'questions' | 'quiz' | 'vocab'>('questions');
+  const [_aiGuide, setAiGuide] = useState<AIGeneratedGuide | null>(null);
+  const [_isLoadingAI, setIsLoadingAI] = useState<boolean>(false);
+  const [_selectedQuizAnswers, setSelectedQuizAnswers] = useState<Record<number, number>>({});
   const [showQuizModal, setShowQuizModal] = useState<boolean>(false);
 
   // Helper to normalize status
   const getNormalizedStatus = (rawStatus: string): 'to_read' | 'reading' | 'completed' => {
-    const s = String(rawStatus).toLowerCase();
+    const s = String(rawStatus || '').toLowerCase();
     if (s.includes('complete') || s.includes('완독')) return 'completed';
-    if (s.includes('read') && !s.includes('to')) return 'reading';
+    if (s.includes('reading') || (s.includes('read') && !s.includes('to') && !s.includes('want'))) return 'reading';
     return 'to_read';
   };
 
   const handleCloseModal = () => {
-    window.dispatchEvent(new CustomEvent('bookfit_library_updated'));
     onClose();
   };
 
-  // 모달 내 상태 변경 및 서재 갱신 (Supabase DB UPDATE & 실시간 목록 재조회)
+  // 퀴즈 검사 완료 후 status = 'completed' 업데이트 핸들러
+  const handleQuizCompleteInModal = async (_score: number, _exp: number) => {
+    setShowQuizModal(false);
+    await handleStatusChange('completed');
+  };
+
+  // 모달 내 상태 변경 및 서재 갱신 (Supabase DB UPDATE & 실시간 목록 재조회 & 탭 이동)
   const handleStatusChange = async (newStatus: 'to_read' | 'reading' | 'completed' | string) => {
     if (!book) return;
-    const { data: { user } } = await supabase.auth.getUser();
 
-    const dbStatus = newStatus === 'to_read' ? 'wantToRead' : (newStatus === 'reading' ? 'reading' : newStatus === 'completed' ? 'completed' : newStatus);
-
-    if (user) {
-      // 1. DB UPDATE 시도
-      const { data, error } = await supabase
-        .from('my_library')
-        .update({ 
-          status: dbStatus, 
-          updated_at: new Date().toISOString() 
-        })
-        .or(`id.eq.${user.id},user_id.eq.${user.id}`)
-        .or(`book_id.eq.${String(book.id)},id.eq.${String(book.id)}`)
-        .select();
-
-      console.log("모달 DB UPDATE 시도 결과:", data, error);
-
-      if (error || !data || data.length === 0) {
-        // Fallback save/upsert
-        await saveOrUpdateLibraryBook(book, dbStatus as any);
-      }
-    } else {
-      await saveOrUpdateLibraryBook(book, dbStatus as any);
+    const norm = getNormalizedStatus(newStatus);
+    const updateRes = await updateLibraryBookStatus(book.id, norm);
+    if (!updateRes.success) {
+      await saveOrUpdateLibraryBook(book, norm);
     }
 
-    const norm = getNormalizedStatus(dbStatus);
     setCurrentBookStatus(norm);
     if (norm === 'to_read') setActiveGuideStage('before');
     else if (norm === 'reading') setActiveGuideStage('during');
     else if (norm === 'completed') setActiveGuideStage('after');
 
-    alert(`📖 '${book.title}' 도서가 [${norm === 'reading' ? '읽는 중' : norm === 'completed' ? '완독 완료' : '읽을 책'}] 탭으로 이동되었습니다!`);
+    if (onStatusUpdate) {
+      await onStatusUpdate(book.id, norm);
+    } else {
+      // 부모 서재 페이지 실시간 목록 재조회 및 탭 이동 전역 이벤트 발송
+      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId: book.id, status: norm } }));
+    }
 
-    // 부모 서재 페이지 실시간 목록 재조회 및 탭 이동 전역 이벤트 발송
-    window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: dbStatus } }));
+    handleCloseModal();
   };
 
   // 1. Dynamic Check if book is already in My Library (DB or localStorage)
@@ -197,19 +187,10 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
   };
 
   // Complete Quiz handler
-  const handleQuizCompleteInModal = async (_score: number, exp: number) => {
+  const handleQuizCompleteInModal = async (_score: number, _exp: number) => {
     if (!book) return;
-    const res = await updateLibraryBookStatus(book.id, 'completed', 100);
-    if (res.success) {
-      setCurrentBookStatus('completed');
-      setActiveGuideStage('after');
-      setShowQuizModal(false);
-      alert(`🎉 완독 퀴즈 검사 완료! 경험치 +${exp}EXP를 획득하셨습니다!`);
-      window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'completed' } }));
-    } else {
-      alert(`⚠️ 완독 저장 실패: ${res.errorMessage}`);
-      setShowQuizModal(false);
-    }
+    setShowQuizModal(false);
+    await handleStatusChange('completed');
   };
 
   const handleToggleLibrary = async () => {
@@ -225,22 +206,22 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
       window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { bookId: book.id, removed: true } }));
     } else {
       // 2. 미등록 도서 ➔ 등록 (INSERT/UPSERT) 처리
-      const res = await saveOrUpdateLibraryBook(book, 'wantToRead');
+      const res = await saveOrUpdateLibraryBook(book, 'to_read');
 
       if (res.success) {
         setIsSaved(true);
         alert(`🎉 '${book.title}' 도서가 내 서재의 [읽을 책] 탭에 성공적으로 등록되었습니다!`);
-        window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'wantToRead' } }));
+        window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'to_read' } }));
       } else {
         saveGuestLibraryBook({
           id: `guest_${book.id}`,
           book,
-          status: 'wantToRead',
+          status: 'to_read',
           progressPercent: 0
         });
         setIsSaved(true);
         alert(`🔖 '${book.title}' 도서가 내 서재의 [읽을 책] 탭에 등록되었습니다!`);
-        window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'wantToRead' } }));
+        window.dispatchEvent(new CustomEvent('bookfit_library_updated', { detail: { book, status: 'to_read' } }));
       }
     }
   };
@@ -429,7 +410,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
                 <div className="grid sm:grid-cols-3 gap-4">
                   {/* Before */}
                   <div
-                    onClick={() => handleStatusChange('wantToRead')}
+                    onClick={() => handleStatusChange('to_read')}
                     className={`p-4 rounded-2xl transition-all space-y-2 border-2 cursor-pointer ${
                       activeGuideStage === 'before'
                         ? 'bg-forest/10 border-forest shadow-md scale-102 ring-2 ring-forest/30'

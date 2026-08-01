@@ -83,7 +83,7 @@ export interface DiagnosticResultData {
   };
 }
 
-export type ReadingStatus = 'wantToRead' | 'reading' | 'completed' | 'TO_READ' | 'READING' | 'COMPLETED';
+export type ReadingStatus = 'to_read' | 'reading' | 'completed';
 
 export interface MyBookItem {
   id: string;
