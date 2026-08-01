@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import type { Book, AIGeneratedGuide } from '../types';
 import { generateBookGuide } from '../services/aiGuideGenerator';
-import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb, updateLibraryBookStatus, supabase } from '../services/supabaseService';
+import { saveOrUpdateLibraryBook, fetchMyLibraryFromDb, deleteBookFromDb, updateLibraryBookStatus } from '../services/supabaseService';
 import { getGuestLibraryBooks, saveGuestLibraryBook, removeGuestLibraryBook } from '../services/authService';
-import { X, Star, BookOpen, HelpCircle, Sparkles, CheckCircle2, ShoppingBag, ExternalLink, Trash2 } from 'lucide-react';
+import { X, Star, BookOpen, Heart, HelpCircle, Sparkles, CheckCircle2, ShoppingBag, ExternalLink, Brain, Loader2, Trash2 } from 'lucide-react';
 import { BookCoverImage } from './common/BookCoverImage';
 import { getCoupangSearchLink } from '../utils/linkUtils';
 import { BookQuizModal } from './library/BookQuizModal';
@@ -19,10 +19,10 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [currentBookStatus, setCurrentBookStatus] = useState<'to_read' | 'reading' | 'completed' | 'none'>('none');
   const [activeGuideStage, setActiveGuideStage] = useState<'before' | 'during' | 'after'>('before');
-  const [_activeTab, _setActiveTab] = useState<'questions' | 'quiz' | 'vocab'>('questions');
-  const [_aiGuide, setAiGuide] = useState<AIGeneratedGuide | null>(null);
-  const [_isLoadingAI, setIsLoadingAI] = useState<boolean>(false);
-  const [_selectedQuizAnswers, setSelectedQuizAnswers] = useState<Record<number, number>>({});
+  const [activeTab, setActiveTab] = useState<'questions' | 'quiz' | 'vocab'>('questions');
+  const [aiGuide, setAiGuide] = useState<AIGeneratedGuide | null>(null);
+  const [isLoadingAI, setIsLoadingAI] = useState<boolean>(false);
+  const [selectedQuizAnswers, setSelectedQuizAnswers] = useState<Record<number, number>>({});
   const [showQuizModal, setShowQuizModal] = useState<boolean>(false);
 
   // Helper to normalize status
@@ -186,12 +186,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({ book, onClose,
     setSelectedQuizAnswers((prev) => ({ ...prev, [qIdx]: optIdx }));
   };
 
-  // Complete Quiz handler
-  const handleQuizCompleteInModal = async (_score: number, _exp: number) => {
-    if (!book) return;
-    setShowQuizModal(false);
-    await handleStatusChange('completed');
-  };
+
 
   const handleToggleLibrary = async () => {
     if (!book) return;

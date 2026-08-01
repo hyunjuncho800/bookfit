@@ -19,10 +19,19 @@ interface MyLibrarySectionProps {
   onOpenDiagnosis: () => void;
 }
 
-// Helper status matchers (standardized status values)
-const isReading = (status: string) => status === 'reading';
-const isWantToRead = (status: string) => status === 'to_read';
-const isCompleted = (status: string) => status === 'completed';
+const INITIAL_PROFILE: UserGamificationProfile = {
+  childName: '우리 아이',
+  levelBadgeTitle: '어휘 Level 3 - 꼬마 탐정 🕵️‍♂️',
+  currentExp: 470,
+  nextLevelExp: 500,
+  completedCountThisMonth: 8,
+  earnedBadges: [
+    { id: 'b1', icon: '🏆', name: '다독왕', description: '한 달 5권 이상 완독 달성' },
+    { id: 'b2', icon: '📚', name: '어휘 수집가', description: '새로운 낱말 20개 습득' },
+    { id: 'b3', icon: '💡', name: '사고력 대장', description: '추론 질문 10회 답변 완료' },
+    { id: 'b4', icon: '⭐', name: '독서 탐정', description: '3-Step 큐레이션 서가 도서 완독' }
+  ]
+};
 
 export const MyLibrarySection: React.FC<MyLibrarySectionProps> = ({ onSelectBook, onOpenDiagnosis }) => {
   const [activeTab, setActiveTab] = useState<ReadingStatus>('to_read');
